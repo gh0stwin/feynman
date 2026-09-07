@@ -49,7 +49,7 @@ The callback is configurable through environment variables, all optional:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ALPHAXIV_CALLBACK_PORT` | `9876` | Callback port used in both the redirect URI and the local server bind |
-| `ALPHAXIV_CALLBACK_HOST` | `127.0.0.1` | Loopback host in the redirect URI. The redirect URI is always `http` and the direct browser callback is loopback-only |
+| `ALPHAXIV_CALLBACK_HOST` | `127.0.0.1` | Loopback host in the redirect URI (`localhost`, `127.x`, or `::1`). The redirect URI is always `http` and the direct browser callback is loopback-only; a non-loopback value is rejected with an error pointing to the published-port or paste fallback |
 | `ALPHAXIV_CALLBACK_BIND` | loopback host when `ALPHAXIV_CALLBACK_HOST` is loopback, else `0.0.0.0` | Address the local callback server binds (e.g. `0.0.0.0` inside Docker) |
 
 The login wait window is 10 minutes, long enough to complete the sign-in on

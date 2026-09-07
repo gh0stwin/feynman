@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 export const ALPHA_HUB_AUTH_014_SOURCE_CONTRACT = Object.freeze({
 	version: "0.1.4",
 	upstreamSha256: "5a16cb4f7fd0faf440951861699450f4d762ae7ef1919701fcded3d4f373ced6",
-	patchedSha256: "80abf59cd9722a12781e16d15d395e889c8de504b880deec598defcd66cb2d2a",
+	patchedSha256: "081eeb09a2aaa646c4426f7e0d6594141dece14151beb199708e68a7d377e438",
 });
 const LEGACY_AUTH_SHA256 = "fa1678c9a1e0f4d3240231728dadbd4b778ba9f9f4b937f235624df67346bf6c";
 const sourceDigest = (source) => createHash("sha256").update(source).digest("hex");
@@ -102,14 +102,17 @@ const CURRENT_CALLBACK_CONSTANTS = [
 const CONFIGURABLE_CALLBACK_CONSTANTS = [
 	"const CALLBACK_PORT = Number(process.env.ALPHAXIV_CALLBACK_PORT) || 9876;",
 	"const CALLBACK_HOST = process.env.ALPHAXIV_CALLBACK_HOST || '127.0.0.1';",
-	// The address the local callback server binds; loopback redirect hosts
-	// bind themselves, while Docker-style remote hosts default to all
-	// interfaces so a published container port reaches the server.
+	// The direct browser callback stays loopback-only: reject a non-loopback
+	// callback host so the redirect URI can never reference one.
+	"if (!isLoopbackHost(CALLBACK_HOST)) {",
+	"  throw new Error(`ALPHAXIV_CALLBACK_HOST must be a loopback host (localhost, 127.x, or ::1). The direct browser callback is loopback-only; for cross-device login publish the callback port (ALPHAXIV_CALLBACK_BIND=0.0.0.0) or use the paste-redirect-URL fallback.`);",
+	"}",
+	// The address the local callback server binds; the loopback redirect host
+	// binds itself unless ALPHAXIV_CALLBACK_BIND publishes it (e.g. 0.0.0.0
+	// inside Docker so a forwarded port reaches the server).
 	"const CALLBACK_BIND = process.env.ALPHAXIV_CALLBACK_BIND || (isLoopbackHost(CALLBACK_HOST) ? CALLBACK_HOST : '0.0.0.0');",
-	// The direct browser callback stays loopback-only: the authorization
-	// server only accepts http redirect URIs for loopback hosts, so the
-	// redirect is always http and cross-device completion uses the paste
-	// fallback.
+	// The redirect URI is always http and loopback-only; cross-device
+	// completion uses the paste fallback.
 	"const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}/callback`;",
 ].join("\n");
 

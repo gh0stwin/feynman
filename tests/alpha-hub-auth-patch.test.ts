@@ -421,6 +421,16 @@ test("patched callback constants honor configured host, port, and bind", async (
 	assert.equal(loopback.module.CALLBACK_BIND, "localhost");
 	assert.equal(loopback.module.REDIRECT_URI, "http://localhost:9443/callback");
 
+	// A non-loopback callback host is rejected outright, so no non-loopback
+	// host and no https can ever appear in the redirect URI.
+	for (const host of ["box.lan", "10.0.0.5", "[2001:db8::1]"]) {
+		assert.throws(() => loadPatchedAuthModule({ env: { ALPHAXIV_CALLBACK_HOST: host } }), /ALPHAXIV_CALLBACK_HOST must be a loopback host/);
+	}
+	for (const host of ["localhost", "127.0.0.1", "127.8.9.10", "::1"]) {
+		const loaded = loadPatchedAuthModule({ env: { ALPHAXIV_CALLBACK_HOST: host } });
+		assert.equal(loaded.module.REDIRECT_URI, `http://${host}:9876/callback`);
+	}
+
 	const published = await startServerOnFreePort({ env: { ALPHAXIV_CALLBACK_BIND: "0.0.0.0" } });
 	try {
 		assert.equal(published.module.CALLBACK_HOST, "127.0.0.1");
