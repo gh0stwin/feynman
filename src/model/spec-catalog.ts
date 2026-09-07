@@ -54,11 +54,15 @@ export type KnownModelSpec = {
 	 * defaults; copied verbatim into the models.json entry.
 	 */
 	thinkingLevelMap?: Partial<Record<ModelThinkingLevel, string | null>>;
-	/**
-	 * Pi compat overrides the official API requires (e.g. a special thinking
-	 * format); copied verbatim into the models.json entry.
-	 */
+	/** Pi compat overrides the official API requires (e.g. a special thinking
+	 * format); copied verbatim into the models.json entry. */
 	compat?: Record<string, unknown>;
+	/**
+	 * Known caveats for this model id's reasoning-effort selection at its
+	 * first-party endpoint, shown to the user during setup so the catalog
+	 * never over-promises that a selected effort reaches the API.
+	 */
+	limitations?: string[];
 	/** Alternative model ids (case-insensitive) that resolve to this spec. */
 	matches?: string[];
 	/** Regex source also accepted for this spec (matched against the bare id). */
@@ -131,6 +135,10 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		contextWindow: 1048576,
 		reasoning: true,
 		thinkingLevelMap: { off: null, minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
+		// Pi's openai-completions runtime drops reasoning_effort for Moonshot
+		// base URLs unless told the endpoint supports it; the official Kimi
+		// thinking guide confirms a top-level reasoning_effort for K3.
+		compat: { supportsReasoningEffort: true },
 		matches: ["k3"],
 		sources: [MOONSHOT_DOCS],
 	},
@@ -143,6 +151,10 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		contextWindow: 262144,
 		reasoning: true,
 		matches: ["kimi-k2.5", "kimi-k2-thinking", "kimi-k2-thinking-turbo"],
+		// The native Moonshot API drives thinking through a `thinking`
+		// parameter, not an OpenAI-style reasoning_effort; a selected effort
+		// may not bind at the first-party endpoint.
+		limitations: ["Reasoning-effort selection may not bind on the first-party Moonshot endpoint; its native API uses a separate thinking parameter."],
 		sources: [MOONSHOT_DOCS],
 	},
 	{
@@ -152,6 +164,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		contextWindow: 262144,
 		reasoning: true,
 		matches: ["kimi-k2.7-code-highspeed", "kimi-for-coding", "kimi-for-coding-highspeed", "k3-256k"],
+		limitations: ["Reasoning-effort selection may not bind on the first-party Moonshot endpoint; kimi-k2.7-code needs no thinking parameter."],
 		sources: [MOONSHOT_DOCS],
 	},
 	{
@@ -180,6 +193,11 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		maxTokens: 131072,
 		reasoning: true,
 		thinkingLevelMap: { off: null, minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
+		// Pi's openai-completions runtime marks Z.AI endpoints as not
+		// supporting reasoning effort and would send an undocumented thinking
+		// toggle; the official GLM-5.3 docs confirm a top-level
+		// reasoning_effort instead (disabling reasoning is no longer supported).
+		compat: { supportsReasoningEffort: true, thinkingFormat: "openai" },
 		matches: ["glm-5.3-flash", "glm-5.3-highspeed"],
 		sources: [ZAI_DOCS],
 	},
@@ -188,6 +206,9 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		label: "GLM 5.2 (Z.AI)",
 		reasoning: true,
 		matches: ["glm-5.2-highspeed"],
+		// No readable official doc confirms an OpenAI-style reasoning_effort
+		// for 5.2 on the first-party endpoint, so a selected effort may not bind.
+		limitations: ["Reasoning-effort selection may not bind on the first-party Z.AI endpoint for this model."],
 		sources: [ZAI_DOCS],
 	},
 	{
@@ -195,6 +216,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		label: "GLM 5.1 (Z.AI)",
 		reasoning: true,
 		matches: ["glm-5", "glm-5-turbo", "glm-4.7"],
+		limitations: ["Reasoning-effort selection may not bind on the first-party Z.AI endpoint for this model."],
 		sources: [ZAI_DOCS],
 	},
 
@@ -283,6 +305,9 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		contextWindow: 1048576,
 		reasoning: true,
 		matches: ["nemotron-3-super-120b-a12b"],
+		// The hosted build.nvidia.com API converts a requested effort client-side
+		// into chat_template_kwargs; a top-level reasoning_effort is not documented.
+		limitations: ["The hosted NVIDIA endpoint applies effort client-side via chat_template_kwargs; a top-level reasoning_effort may not be forwarded as-is."],
 		sources: [NVIDIA_NIM_DOCS],
 	},
 	{
@@ -292,6 +317,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		contextWindow: 1048576,
 		reasoning: true,
 		matches: ["nemotron-3-ultra-550b-a55b"],
+		limitations: ["The hosted NVIDIA endpoint applies effort client-side via chat_template_kwargs; a top-level reasoning_effort may not be forwarded as-is."],
 		sources: [NVIDIA_NIM_DOCS],
 	},
 	{
@@ -302,6 +328,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		contextWindow: 262144,
 		reasoning: true,
 		matches: ["nemotron-3-nano-omni-30b-a3b-reasoning"],
+		limitations: ["The hosted NVIDIA endpoint applies effort client-side via chat_template_kwargs; a top-level reasoning_effort may not be forwarded as-is."],
 		sources: [NVIDIA_NIM_DOCS],
 	},
 ];

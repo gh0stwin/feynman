@@ -92,6 +92,47 @@ test("flagship rows keep officially documented effort levels and context caps", 
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")?.contextWindow, 262144);
 });
 
+test("flagship rows carry compat overrides so Pi forwards effort at first-party endpoints", () => {
+	// Kimi K3: Moonshot runtime drops reasoning_effort unless told the endpoint
+	// supports it; the official thinking guide confirms a top-level effort.
+	const kimi = lookupKnownModelSpec("kimi-k3")!;
+	assert.deepEqual(kimi.compat, { supportsReasoningEffort: true });
+
+	// GLM 5.3: Z.AI runtime would send an undocumented thinking toggle and
+	// swallow the effort; official docs confirm a top-level OpenAI-style effort.
+	const glm = lookupKnownModelSpec("glm-5.3")!;
+	assert.deepEqual(glm.compat, { supportsReasoningEffort: true, thinkingFormat: "openai" });
+});
+
+test("rows with a first-party effort limitation carry a printed note", () => {
+	for (const id of ["kimi-k2.6", "kimi-k2.7-code", "glm-5.2", "glm-5.1", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"]) {
+		const spec = lookupKnownModelSpec(id)!;
+		assert.ok(spec.limitations && spec.limitations.length > 0, `${id} documents its effort limitation`);
+	}
+	// Flagship rows that forward the effort carry no limitation note.
+	assert.equal(lookupKnownModelSpec("kimi-k3")?.limitations, undefined);
+	assert.equal(lookupKnownModelSpec("glm-5.3")?.limitations, undefined);
+	assert.equal(lookupKnownModelSpec("deepseek-v4-pro")?.limitations, undefined);
+});
+
+test("compat overrides reach models.json through upsertProviderConfig", () => {
+	const dir = mkdtempSync(join(tmpdir(), "feynman-spec-catalog-"));
+	const modelsPath = join(dir, "models.json");
+	const result = upsertProviderConfig(modelsPath, "proxy", {
+		baseUrl: "https://api.moonshot.ai/v1",
+		api: "openai-completions",
+		apiKey: "local",
+		models: [
+			{ id: "kimi-k3", contextWindow: 1048576, reasoning: true, compat: { supportsReasoningEffort: true } },
+			{ id: "glm-5.3", contextWindow: 1000000, maxTokens: 131072, reasoning: true, compat: { supportsReasoningEffort: true, thinkingFormat: "openai" } },
+		],
+	});
+	assert.deepEqual(result, { ok: true });
+	const parsed = JSON.parse(readFileSync(modelsPath, "utf8")) as any;
+	assert.deepEqual(parsed.providers.proxy.models[0].compat, { supportsReasoningEffort: true });
+	assert.deepEqual(parsed.providers.proxy.models[1].compat, { supportsReasoningEffort: true, thinkingFormat: "openai" });
+});
+
 test("specReasoningLevels reads the documented thinking-level map", () => {
 	// GLM-5.3 official docs: effort low / high / max, reasoning always on.
 	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("glm-5.3")), ["low", "high", "max"]);

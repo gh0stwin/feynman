@@ -311,6 +311,9 @@ export async function promptModelSpecDefinitions(modelIds: string[]): Promise<Pr
 		const spec = lookupKnownModelSpec(modelId);
 		if (spec) {
 			printInfo(`${modelId}: recognized as ${spec.label} — pre-filled from official specs, edit any value.`);
+			for (const limitation of spec.limitations ?? []) {
+				printWarning(`${modelId}: ${limitation}`);
+			}
 		} else {
 			printInfo(`${modelId}: not in the built-in catalog — showing safe defaults, edit any value.`);
 		}
