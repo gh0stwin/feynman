@@ -147,7 +147,7 @@ async function selectApiKeyProvider(): Promise<ApiKeyProviderInfo | undefined> {
 type CustomProviderSetup = {
 	providerId: string;
 	modelIds: string[];
-	modelDefinitions: ProviderModelDefinition[];
+	modelDefinitions?: ProviderModelDefinition[];
 	baseUrl: string;
 	api: "openai-completions" | "openai-responses" | "anthropic-messages" | "google-generative-ai";
 	apiKeyConfig: string;
@@ -813,7 +813,7 @@ async function configureApiKeyProvider(authPath: string, providerId?: string): P
 			apiKey: setup.apiKeyConfig,
 			api: setup.api,
 			authHeader: setup.authHeader,
-			models: setup.modelDefinitions,
+			models: setup.modelDefinitions ?? setup.modelIds.map((id) => ({ id })),
 		});
 		if (!result.ok) {
 			printWarning(result.error);
