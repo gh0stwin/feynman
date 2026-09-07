@@ -1,0 +1,174 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { KNOWN_MODEL_SPECS, lookupKnownModelSpec, parseTokenCountInput, UNKNOWN_MODEL_FALLBACK, specReasoningLevels, buildThinkingLevelMap } from "../src/model/spec-catalog.js";
+import { promptModelSpecDefinitions } from "../src/model/commands.js";
+import { upsertProviderConfig } from "../src/model/models-json.js";
+
+test("lookupKnownModelSpec resolves every family the catalog documents", () => {
+	const expected = [
+		// majors
+		"gpt-5.6",
+		"gpt-5.6-sol",
+		"claude-opus-5",
+		"gemini-3.8-flash",
+		"deepseek-v4-pro",
+		// captain-required families
+		"kimi-k2.6",
+		"glm-5.3",
+		"qwen3.8-max",
+		"mimo-v2.5",
+		"MiniMax-M3",
+		"nvidia/nemotron-3-super-120b-a12b",
+	];
+	for (const id of expected) {
+		assert.ok(lookupKnownModelSpec(id), `expected catalog hit for ${id}`);
+	}
+});
+
+test("lookupKnownModelSpec matches aliases and dated model ids case-insensitively", () => {
+	assert.equal(lookupKnownModelSpec("KIMI-K3")?.id, "kimi-k3");
+	assert.equal(lookupKnownModelSpec("k3")?.id, "kimi-k3");
+	assert.equal(lookupKnownModelSpec("claude-sonnet-4-5-20250929")?.id, "claude-sonnet-4-5");
+	assert.equal(lookupKnownModelSpec("hy3-preview")?.label, "Hunyuan 3 (Tencent)");
+	assert.equal(lookupKnownModelSpec("hy4-preview-fp8")?.label, "Hunyuan 4 (Tencent)");
+	assert.equal(lookupKnownModelSpec("hunyuan-t3")?.id, "hy3");
+	assert.equal(lookupKnownModelSpec("hunyuan-t4")?.id, "hy4-preview");
+});
+
+test("unknown model ids miss the catalog and fall back to safe defaults", () => {
+	assert.equal(lookupKnownModelSpec("totally-made-up-model"), undefined);
+	assert.equal(UNKNOWN_MODEL_FALLBACK.contextWindow, 128000);
+	assert.equal(UNKNOWN_MODEL_FALLBACK.maxTokens, 16384);
+	assert.equal(UNKNOWN_MODEL_FALLBACK.reasoning, false);
+	assert.deepEqual(specReasoningLevels(undefined), []);
+});
+
+test("every catalog row documents its official source and positive limits", () => {
+	for (const spec of KNOWN_MODEL_SPECS) {
+		assert.ok(spec.sources.length > 0, `${spec.id} documents its source`);
+		assert.ok((spec.contextWindow ?? Infinity) > 0, `${spec.id} context window is positive when documented`);
+		assert.ok((spec.maxTokens ?? Infinity) > 0, `${spec.id} max tokens is positive when documented`);
+	}
+});
+
+test("Hunyuan rows carry official context and efforts but prompt for the undocumented max-completion cap", () => {
+	const hy3 = lookupKnownModelSpec("hy3")!;
+	assert.equal(hy3.contextWindow, 262144);
+	assert.equal(hy3.maxTokens, undefined);
+	assert.equal(hy3.reasoning, true);
+	assert.equal(hy3.thinkingLevelMap?.off, "no_think");
+	assert.equal(hy3.thinkingLevelMap?.high, "high");
+	assert.equal(hy3.compat?.thinkingFormat, "chat-template");
+	const hy4 = lookupKnownModelSpec("hy4-preview")!;
+	assert.equal(hy4.contextWindow, 1048576);
+	assert.equal(hy4.maxTokens, undefined);
+});
+
+test("flagship rows keep officially documented effort levels and context caps", () => {
+	// GLM-5.3 official docs: reasoning always on with effort low / high / max.
+	const glm = lookupKnownModelSpec("glm-5.3")!;
+	assert.equal(glm.contextWindow, 1000000);
+	assert.equal(glm.maxTokens, 131072);
+	assert.equal(glm.thinkingLevelMap?.max, "max");
+	assert.deepEqual(specReasoningLevels(glm), ["low", "high", "max"]);
+
+	// MiniMax-M3 official docs: 1,000,000-token context window.
+	assert.equal(lookupKnownModelSpec("MiniMax-M3")?.contextWindow, 1000000);
+
+	// NVIDIA official specifications: 1M / 1M / 262K context windows.
+	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-super-120b-a12b")?.contextWindow, 1048576);
+	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-ultra-550b-a55b")?.contextWindow, 1048576);
+	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")?.contextWindow, 262144);
+});
+
+test("specReasoningLevels reads the documented thinking-level map", () => {
+	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("gpt-5.6")), ["low", "medium", "high", "xhigh", "max"]);
+	// No explicit map: reasoning models keep the provider default levels.
+	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("kimi-k2.6")), ["low", "medium", "high"]);
+	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("gpt-4o")), []);
+});
+
+test("buildThinkingLevelMap keeps documented effort values and pins unselected levels to null", () => {
+	const hy3 = lookupKnownModelSpec("hy3")!;
+	const map = buildThinkingLevelMap(["high"], hy3.thinkingLevelMap);
+	assert.equal(map.off, "no_think");
+	assert.equal(map.low, null);
+	assert.equal(map.high, "high");
+	assert.equal(map.max, null);
+
+	const synthetic = buildThinkingLevelMap(["low", "xhigh"]);
+	assert.deepEqual(synthetic, {
+		minimal: null,
+		low: "low",
+		medium: null,
+		high: null,
+		xhigh: "xhigh",
+		max: null,
+	});
+
+	// An empty selection pins every effort off while keeping "off" available.
+	const none = buildThinkingLevelMap([]);
+	assert.deepEqual(none, {
+		minimal: null,
+		low: null,
+		medium: null,
+		high: null,
+		xhigh: null,
+		max: null,
+	});
+});
+
+test("parseTokenCountInput accepts plain and suffixed counts and rejects truncated input", () => {
+	assert.equal(parseTokenCountInput("128000"), 128000);
+	assert.equal(parseTokenCountInput(" 1048576 "), 1048576);
+	assert.equal(parseTokenCountInput("128k"), 128000);
+	assert.equal(parseTokenCountInput("1m"), 1000000);
+	assert.equal(parseTokenCountInput("2M"), 2000000);
+	assert.equal(parseTokenCountInput("128k tokens"), undefined);
+	assert.equal(parseTokenCountInput(""), undefined);
+	assert.equal(parseTokenCountInput("0"), undefined);
+	assert.equal(parseTokenCountInput("-5"), undefined);
+	assert.equal(parseTokenCountInput("12.5"), undefined);
+});
+
+test("promptModelSpecDefinitions non-interactive path returns bare ids for backward compatibility", async () => {
+	const definitions = await promptModelSpecDefinitions(["my-model"]);
+	assert.deepEqual(definitions, [{ id: "my-model" }]);
+});
+
+test("upsertProviderConfig writes catalog-derived per-model limits and preserves legacy provider entries", () => {
+	const dir = mkdtempSync(join(tmpdir(), "feynman-spec-catalog-"));
+	const modelsPath = join(dir, "models.json");
+
+	// Pre-existing config without the new fields stays untouched by setup re-runs.
+	const legacy = upsertProviderConfig(modelsPath, "legacy", {
+		baseUrl: "http://localhost:4000/v1",
+		api: "openai-completions",
+		apiKey: "local",
+		models: [{ id: "old-model" }],
+	});
+	assert.deepEqual(legacy, { ok: true });
+
+	const result = upsertProviderConfig(modelsPath, "proxy", {
+		baseUrl: "https://proxy.example/v1",
+		api: "openai-completions",
+		apiKey: "local",
+		models: [
+			{ id: "kimi-k3", contextWindow: 1048576, maxTokens: 131072, reasoning: true, thinkingLevelMap: { low: "low", high: "high", max: "max" } },
+			{ id: "my-local-model", contextWindow: 128000, maxTokens: 16384, reasoning: false },
+		],
+	});
+	assert.deepEqual(result, { ok: true });
+
+	const parsed = JSON.parse(readFileSync(modelsPath, "utf8")) as any;
+	assert.equal(parsed.providers.proxy.models[0].contextWindow, 1048576);
+	assert.equal(parsed.providers.proxy.models[0].maxTokens, 131072);
+	assert.equal(parsed.providers.proxy.models[0].reasoning, true);
+	assert.equal(parsed.providers.proxy.models[0].thinkingLevelMap.max, "max");
+	assert.equal(parsed.providers.legacy.models[0].id, "old-model");
+	assert.ok(parsed.providers.legacy.models.every((model: any) => model.contextWindow === undefined));
+});
