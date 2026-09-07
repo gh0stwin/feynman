@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 export const ALPHA_HUB_AUTH_014_SOURCE_CONTRACT = Object.freeze({
 	version: "0.1.4",
 	upstreamSha256: "5a16cb4f7fd0faf440951861699450f4d762ae7ef1919701fcded3d4f373ced6",
-	patchedSha256: "4bfea9ac2d882277270019668e08d45f84be3ab9922639502942946a80d8395d",
+	patchedSha256: "80abf59cd9722a12781e16d15d395e889c8de504b880deec598defcd66cb2d2a",
 });
 const LEGACY_AUTH_SHA256 = "fa1678c9a1e0f4d3240231728dadbd4b778ba9f9f4b937f235624df67346bf6c";
 const sourceDigest = (source) => createHash("sha256").update(source).digest("hex");
@@ -106,9 +106,11 @@ const CONFIGURABLE_CALLBACK_CONSTANTS = [
 	// bind themselves, while Docker-style remote hosts default to all
 	// interfaces so a published container port reaches the server.
 	"const CALLBACK_BIND = process.env.ALPHAXIV_CALLBACK_BIND || (isLoopbackHost(CALLBACK_HOST) ? CALLBACK_HOST : '0.0.0.0');",
-	// The authorization server only allows HTTP for loopback hosts; any other
-	// host must use HTTPS in the registered redirect URI.
-	"const REDIRECT_URI = `${isLoopbackHost(CALLBACK_HOST) ? 'http' : 'https'}://${CALLBACK_HOST}:${CALLBACK_PORT}/callback`;",
+	// The direct browser callback stays loopback-only: the authorization
+	// server only accepts http redirect URIs for loopback hosts, so the
+	// redirect is always http and cross-device completion uses the paste
+	// fallback.
+	"const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}/callback`;",
 ].join("\n");
 
 const CURRENT_LISTEN_TARGET = "    server.listen(CALLBACK_PORT, '127.0.0.1', () => {";

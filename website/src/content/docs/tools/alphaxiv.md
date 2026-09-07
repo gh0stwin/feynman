@@ -37,17 +37,19 @@ stored on the device running Feynman:
   docker run -p 9876:9876 -e ALPHAXIV_CALLBACK_BIND=0.0.0.0 ... feynman alpha login
   ```
 
-- **Paste the redirect URL:** complete the sign-in on any device. The browser's
-  final address (`http://127.0.0.1:9876/callback?code=...` — it may fail to
-  load, the address bar still holds it) is printed and can be pasted into the
-  waiting CLI, which extracts the code from it. Press Ctrl-C to cancel.
+- **Paste the redirect URL (universal cross-device path):** the direct browser
+  callback only works for a loopback host, so to complete the sign-in on a
+  different device, finish the sign-in anywhere and paste the browser's final
+  address (`http://127.0.0.1:9876/callback?code=...` — it may fail to load, the
+  address bar still holds it) into the waiting CLI, which extracts the code from
+  it. Press Ctrl-C to cancel.
 
 The callback is configurable through environment variables, all optional:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ALPHAXIV_CALLBACK_PORT` | `9876` | Callback port used in both the redirect URI and the local server bind |
-| `ALPHAXIV_CALLBACK_HOST` | `127.0.0.1` | Host in the redirect URI. The alphaXiv authorization server only accepts `http` for loopback hosts; any other host must use `https` |
+| `ALPHAXIV_CALLBACK_HOST` | `127.0.0.1` | Loopback host in the redirect URI. The redirect URI is always `http` and the direct browser callback is loopback-only |
 | `ALPHAXIV_CALLBACK_BIND` | loopback host when `ALPHAXIV_CALLBACK_HOST` is loopback, else `0.0.0.0` | Address the local callback server binds (e.g. `0.0.0.0` inside Docker) |
 
 The login wait window is 10 minutes, long enough to complete the sign-in on

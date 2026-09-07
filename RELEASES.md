@@ -8,7 +8,7 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ### Remote-friendly alphaXiv login
 
-- Made the alphaXiv login callback configurable so the browsing device can differ from the device storing credentials: `ALPHAXIV_CALLBACK_PORT`, `ALPHAXIV_CALLBACK_HOST`, and `ALPHAXIV_CALLBACK_BIND` set the callback port, the redirect host, and the server bind address, so a published container port can receive the OAuth redirect.
+- Made the alphaXiv login callback configurable so the browsing device can differ from the device storing credentials: `ALPHAXIV_CALLBACK_PORT`, `ALPHAXIV_CALLBACK_BIND`, and the loopback-only `ALPHAXIV_CALLBACK_HOST` set the callback port, the server bind address, and the redirect host, so a published container port can receive the OAuth redirect while the redirect URI stays `http`.
 - Added a paste-the-redirect-URL fallback: complete the alphaXiv sign-in on any device, then paste the browser's final `127.0.0.1:...?code=...` address into the waiting CLI, which extracts the token from it.
 - Extended the login wait from 120 seconds to 10 minutes for cross-device sign-in and stopped a closed stdin from aborting the normal browser-callback flow.
 

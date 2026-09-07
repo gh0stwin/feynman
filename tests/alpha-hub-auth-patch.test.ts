@@ -415,11 +415,11 @@ test("patched callback constants honor configured host, port, and bind", async (
 	assert.equal(defaults.module.CALLBACK_BIND, "127.0.0.1");
 	assert.equal(defaults.module.REDIRECT_URI, "http://127.0.0.1:9876/callback");
 
-	const remote = loadPatchedAuthModule({ env: { ALPHAXIV_CALLBACK_PORT: "9443", ALPHAXIV_CALLBACK_HOST: "box.lan" } });
-	assert.equal(remote.module.CALLBACK_PORT, 9443);
-	assert.equal(remote.module.CALLBACK_HOST, "box.lan");
-	assert.equal(remote.module.CALLBACK_BIND, "0.0.0.0");
-	assert.equal(remote.module.REDIRECT_URI, "https://box.lan:9443/callback");
+	const loopback = loadPatchedAuthModule({ env: { ALPHAXIV_CALLBACK_PORT: "9443", ALPHAXIV_CALLBACK_HOST: "localhost" } });
+	assert.equal(loopback.module.CALLBACK_PORT, 9443);
+	assert.equal(loopback.module.CALLBACK_HOST, "localhost");
+	assert.equal(loopback.module.CALLBACK_BIND, "localhost");
+	assert.equal(loopback.module.REDIRECT_URI, "http://localhost:9443/callback");
 
 	const published = await startServerOnFreePort({ env: { ALPHAXIV_CALLBACK_BIND: "0.0.0.0" } });
 	try {
