@@ -15,6 +15,8 @@ test("lookupKnownModelSpec resolves every open-weight family the catalog documen
 		"kimi-k2.6",
 		"glm-5.3",
 		"qwen3.8-max",
+		"qwen3.8-flash",
+		"qwen3.8-flash-next",
 		"mimo-v2.5",
 		"hy3",
 		"hy4-preview",
@@ -90,6 +92,27 @@ test("flagship rows keep officially documented effort levels and context caps", 
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-super-120b-a12b")?.contextWindow, 1048576);
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-ultra-550b-a55b")?.contextWindow, 1048576);
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")?.contextWindow, 262144);
+});
+
+test("non-existent highspeed aliases are absent and qwen3.8-flash-next carries its own doc-verified specs", () => {
+	// The captain verified these highspeed ids do not exist.
+	assert.equal(lookupKnownModelSpec("glm-5.3-highspeed"), undefined);
+	assert.equal(lookupKnownModelSpec("glm-5.2-highspeed"), undefined);
+	assert.equal(lookupKnownModelSpec("glm-5.3-flash")?.id, "glm-5.3");
+
+	// qwen3.8-flash has its own official specs, distinct from qwen3.8-max.
+	const flash = lookupKnownModelSpec("qwen3.8-flash")!;
+	assert.equal(flash.contextWindow, 1000000);
+	assert.equal(flash.maxTokens, 131072);
+	assert.equal(lookupKnownModelSpec("qwen3.8-max")?.matches, undefined);
+
+	// qwen3.8-flash-next is its own entry: 262,144 native context,
+	// 131,072 final-response output, xhigh/medium/low efforts.
+	const next = lookupKnownModelSpec("qwen3.8-flash-next")!;
+	assert.equal(next.contextWindow, 262144);
+	assert.equal(next.maxTokens, 131072);
+	assert.equal(next.reasoning, true);
+	assert.deepEqual(specReasoningLevels(next), ["low", "medium", "xhigh"]);
 });
 
 test("flagship rows carry compat overrides so Pi forwards effort at first-party endpoints", () => {

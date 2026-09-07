@@ -198,14 +198,15 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		// toggle; the official GLM-5.3 docs confirm a top-level
 		// reasoning_effort instead (disabling reasoning is no longer supported).
 		compat: { supportsReasoningEffort: true, thinkingFormat: "openai" },
-		matches: ["glm-5.3-flash", "glm-5.3-highspeed"],
+		// "glm-5.3-highspeed" removed: the id does not exist (captain-verified).
+		matches: ["glm-5.3-flash"],
 		sources: [ZAI_DOCS],
 	},
 	{
 		id: "glm-5.2",
 		label: "GLM 5.2 (Z.AI)",
 		reasoning: true,
-		matches: ["glm-5.2-highspeed"],
+		// "glm-5.2-highspeed" removed: the id does not exist (captain-verified).
 		// No readable official doc confirms an OpenAI-style reasoning_effort
 		// for 5.2 on the first-party endpoint, so a selected effort may not bind.
 		limitations: ["Reasoning-effort selection may not bind on the first-party Z.AI endpoint for this model."],
@@ -227,8 +228,32 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		// Official docs list the model ids; numeric context/output caps are not
 		// documented on a directly readable page, so setup prompts for them.
 		reasoning: true,
-		matches: ["qwen3.8-flash"],
 		sources: [QWEN_DOCS],
+	},
+	{
+		id: "qwen3.8-flash",
+		label: "Qwen 3.8 Flash (Alibaba)",
+		// Official Model Studio page (alibabacloud.com/help/en/model-studio/
+		// qwen3-8-flash.md): context window 1,000,000; max output 131,072
+		// (thinking and direct modes); multimodal reasoning model.
+		contextWindow: 1000000,
+		maxTokens: 131072,
+		reasoning: true,
+		sources: [QWEN_DOCS],
+	},
+	{
+		id: "qwen3.8-flash-next",
+		label: "Qwen 3.8 Flash Next (Alibaba)",
+		// Official Qwen3.8-Flash-Next card (huggingface.co/Qwen/Qwen3.8-Flash-Next):
+		// context 262,144 natively (extensible to 1,000,000 only via self-hosted
+		// YaRN RoPE scaling); recommended final-response output 131,072
+		// (reasoning content 262,144); thinking controlled via enable_thinking /
+		// preserve_thinking, reasoning_effort levels xhigh (default), medium, low.
+		contextWindow: 262144,
+		maxTokens: 131072,
+		reasoning: true,
+		thinkingLevelMap: { minimal: null, low: "low", medium: "medium", high: null, xhigh: "xhigh", max: null },
+		sources: ["https://huggingface.co/Qwen/Qwen3.8-Flash-Next"],
 	},
 	{
 		id: "qwen3.7-max",
