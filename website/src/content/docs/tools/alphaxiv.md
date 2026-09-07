@@ -21,6 +21,38 @@ Check your authentication status:
 feynman alpha status
 ```
 
+### Logging in from another device
+
+Login starts a local callback server and waits for the OAuth redirect. When
+Feynman runs in Docker or on a remote machine, the browser usually runs on a
+different device. Two client-side options cover this; credentials are always
+stored on the device running Feynman:
+
+- **Published port (Docker):** publish the callback port and let the server
+  accept it. The default redirect URI `http://127.0.0.1:9876/callback` then
+  resolves on the browsing device and reaches the container through the
+  published port:
+
+  ```bash
+  docker run -p 9876:9876 -e ALPHAXIV_CALLBACK_BIND=0.0.0.0 ... feynman alpha login
+  ```
+
+- **Paste the redirect URL:** complete the sign-in on any device. The browser's
+  final address (`http://127.0.0.1:9876/callback?code=...` — it may fail to
+  load, the address bar still holds it) is printed and can be pasted into the
+  waiting CLI, which extracts the code from it. Press Ctrl-C to cancel.
+
+The callback is configurable through environment variables, all optional:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ALPHAXIV_CALLBACK_PORT` | `9876` | Callback port used in both the redirect URI and the local server bind |
+| `ALPHAXIV_CALLBACK_HOST` | `127.0.0.1` | Host in the redirect URI. The alphaXiv authorization server only accepts `http` for loopback hosts; any other host must use `https` |
+| `ALPHAXIV_CALLBACK_BIND` | loopback host when `ALPHAXIV_CALLBACK_HOST` is loopback, else `0.0.0.0` | Address the local callback server binds (e.g. `0.0.0.0` inside Docker) |
+
+The login wait window is 10 minutes, long enough to complete the sign-in on
+another device before pasting the redirect URL.
+
 ## What it provides
 
 AlphaXiv gives Feynman access to several capabilities that power the research workflows:
