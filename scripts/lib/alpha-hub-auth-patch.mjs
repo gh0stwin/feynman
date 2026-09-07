@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 export const ALPHA_HUB_AUTH_014_SOURCE_CONTRACT = Object.freeze({
 	version: "0.1.4",
 	upstreamSha256: "5a16cb4f7fd0faf440951861699450f4d762ae7ef1919701fcded3d4f373ced6",
-	patchedSha256: "081eeb09a2aaa646c4426f7e0d6594141dece14151beb199708e68a7d377e438",
+	patchedSha256: "6746cfbe615f73d7968d3c4374bc2cdff22c5910c193f84888b94b5870ad25bc",
 });
 const LEGACY_AUTH_SHA256 = "fa1678c9a1e0f4d3240231728dadbd4b778ba9f9f4b937f235624df67346bf6c";
 const sourceDigest = (source) => createHash("sha256").update(source).digest("hex");
@@ -119,20 +119,20 @@ const CONFIGURABLE_CALLBACK_CONSTANTS = [
 const CURRENT_LISTEN_TARGET = "    server.listen(CALLBACK_PORT, '127.0.0.1', () => {";
 const CURRENT_LISTEN_PATCHED = "    server.listen(CALLBACK_PORT, CALLBACK_BIND, () => {";
 
-// The cross-device paste fallback needs more than upstream's 120 seconds, and
-// an unref'd timer keeps a completed login from hanging the process until the
-// timer fires when the race finished through the manual path instead.
+// Keep upstream's 120-second login wait. The only added line unrefs the
+// timer so a login completed through the paste path does not hang the
+// process until the timer fires; the window length itself is unchanged.
 const CURRENT_WAIT_TIMEOUT = [
 	"    const timeout = setTimeout(() => {",
 	"      server.close();",
 	"      reject(new Error('Login timed out after 120 seconds'));",
 	"    }, 120000);",
 ].join("\n");
-const EXTENDED_WAIT_TIMEOUT = [
+const UNREF_WAIT_TIMEOUT = [
 	"    const timeout = setTimeout(() => {",
 	"      server.close();",
-	"      reject(new Error('Login timed out after 10 minutes'));",
-	"    }, 600000);",
+	"      reject(new Error('Login timed out after 120 seconds'));",
+	"    }, 120000);",
 	"    timeout.unref?.();",
 ].join("\n");
 
@@ -301,7 +301,7 @@ export function patchAlphaHubAuthSource(source, options = {}) {
 		patched = patched.replace(CURRENT_LISTEN_TARGET, CURRENT_LISTEN_PATCHED);
 	}
 	if (patched.includes(CURRENT_WAIT_TIMEOUT)) {
-		patched = patched.replace(CURRENT_WAIT_TIMEOUT, EXTENDED_WAIT_TIMEOUT);
+		patched = patched.replace(CURRENT_WAIT_TIMEOUT, UNREF_WAIT_TIMEOUT);
 	}
 	if (patched.includes("function startCallbackServer() {") && !patched.includes("function parseManualRedirect(")) {
 		patched = patched.replace("function startCallbackServer() {", MANUAL_REDIRECT_HELPERS);

@@ -6,11 +6,11 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
-### Remote-friendly alphaXiv login
+### Complete alphaXiv login from a different device
 
-- Made the alphaXiv login callback configurable so the browsing device can differ from the device storing credentials: `ALPHAXIV_CALLBACK_PORT`, `ALPHAXIV_CALLBACK_BIND`, and the loopback-only `ALPHAXIV_CALLBACK_HOST` set the callback port, the server bind address, and the redirect host, so a published container port can receive the OAuth redirect while the redirect URI stays `http`.
-- Added a paste-the-redirect-URL fallback: complete the alphaXiv sign-in on any device, then paste the browser's final `127.0.0.1:...?code=...` address into the waiting CLI, which extracts the token from it.
-- Extended the login wait from 120 seconds to 10 minutes for cross-device sign-in and stopped a closed stdin from aborting the normal browser-callback flow.
+- Cross-device login completion is now possible where it previously was not: the login flow used to hard-assume the browsing device and the token-storage device were the same machine. Complete the alphaXiv sign-in on any device, then paste the browser's final `127.0.0.1:...?code=...` address into the waiting CLI, which validates the OAuth state, extracts the token from it, and stores credentials on the device running Feynman.
+- Kept the 120-second login wait and stopped a closed stdin from aborting the normal browser-callback flow.
+- Callback tuning as supporting detail: `ALPHAXIV_CALLBACK_PORT` sets the callback port, `ALPHAXIV_CALLBACK_BIND` sets the server bind address (e.g. `0.0.0.0` so a published Docker port receives the redirect), and `ALPHAXIV_CALLBACK_HOST` is loopback-only (`localhost`, `127.x`, `::1`) with non-loopback values rejected, because the alphaXiv authorization server only accepts `http` redirect URIs for loopback hosts.
 
 ## v0.3.49 - 2026-09-06
 
