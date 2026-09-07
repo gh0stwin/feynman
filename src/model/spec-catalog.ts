@@ -15,6 +15,12 @@
  * reviewer can audit each row. Only values traceable to an official doc are
  * stored here; a value without official documentation stays undefined so
  * setup prompts the user for it instead of pre-filling a guess.
+ *
+ * Scope: open-weight model families only (DeepSeek, Kimi, GLM, Qwen, MiMo,
+ * Hunyuan, MiniMax, Nemotron). Closed-weight models (GPT, Claude, Gemini,
+ * Grok) never appear here — their providers ship their own runtime model
+ * registries, so a closed-weight id is simply unknown to this catalog and
+ * prompts at setup with safe fallbacks.
  */
 
 export type ModelThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -61,9 +67,6 @@ export type KnownModelSpec = {
 	sources: string[];
 };
 
-const OPENAI_MODELS_DOC = "https://platform.openai.com/docs/models";
-const ANTHROPIC_MODELS_DOC = "https://docs.anthropic.com/en/docs/about-claude/models";
-const GOOGLE_MODELS_DOC = "https://ai.google.dev/gemini-api/docs/models";
 const DEEPSEEK_DOCS = "https://api-docs.deepseek.com";
 const MOONSHOT_DOCS = "https://platform.moonshot.ai/docs";
 const ZAI_DOCS = "https://docs.z.ai/guides/llm/glm-5.3";
@@ -73,15 +76,6 @@ const HUNYUAN_HY3_REPO = "https://github.com/Tencent-Hunyuan/Hy3";
 const HUNYUAN_HY4_REPO = "https://github.com/Tencent-Hunyuan/Hy4-preview";
 const MINIMAX_DOCS = "https://platform.minimax.io/docs/guides/models-intro";
 const NVIDIA_NIM_DOCS = "https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b";
-
-// --- Anthropic Claude ---
-function anthropicExtendedMap(
-	levels: Array<"off" | "xhigh" | "max">,
-): Partial<Record<ModelThinkingLevel, string | null>> {
-	const map: Partial<Record<ModelThinkingLevel, string | null>> = {};
-	for (const level of levels) map[level] = level;
-	return map;
-}
 
 // --- Tencent Hunyuan ---
 // Verified from the official Tencent-Hunyuan repos: reasoning effort is set
@@ -109,196 +103,6 @@ function hunyuanThinkingLevelMap(levels: Array<"low" | "high">): {
 }
 
 export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
-	// --- OpenAI GPT ---
-	{
-		id: "gpt-5.6",
-		label: "OpenAI GPT-5.6",
-		contextWindow: 272000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" },
-		matches: ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-5.5",
-		label: "OpenAI GPT-5.5",
-		contextWindow: 272000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null },
-		matches: ["gpt-5.5-pro"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-5.4",
-		label: "OpenAI GPT-5.4",
-		contextWindow: 272000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null },
-		matches: ["gpt-5.4-mini", "gpt-5.4-nano"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-5.3-codex",
-		label: "OpenAI GPT-5.3 Codex",
-		contextWindow: 400000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null },
-		matches: ["gpt-5.3-codex-spark"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-5.2",
-		label: "OpenAI GPT-5.2",
-		contextWindow: 400000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null },
-		matches: ["gpt-5.2-pro", "gpt-5.2-chat-latest"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-5.1",
-		label: "OpenAI GPT-5.1",
-		contextWindow: 400000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null },
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-5",
-		label: "OpenAI GPT-5",
-		contextWindow: 400000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: null, max: null },
-		matches: ["gpt-5-mini", "gpt-5-nano"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-4.1",
-		label: "OpenAI GPT-4.1",
-		contextWindow: 1047576,
-		maxTokens: 32768,
-		reasoning: false,
-		matches: ["gpt-4.1-mini", "gpt-4.1-nano"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "gpt-4o",
-		label: "OpenAI GPT-4o",
-		contextWindow: 128000,
-		maxTokens: 16384,
-		reasoning: false,
-		matches: ["gpt-4o-mini"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-	{
-		id: "o3",
-		label: "OpenAI o3",
-		contextWindow: 200000,
-		maxTokens: 100000,
-		reasoning: true,
-		thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null },
-		matches: ["o1", "o3-mini", "o4-mini", "o1-pro", "o3-pro"],
-		sources: [OPENAI_MODELS_DOC],
-	},
-
-	// --- Anthropic Claude ---
-	{
-		id: "claude-opus-5",
-		label: "Anthropic Claude Opus 5",
-		contextWindow: 1000000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: anthropicExtendedMap(["off", "xhigh", "max"]),
-		matches: ["claude-sonnet-5"],
-		pattern: "^claude-(?:opus|sonnet)-5(?:-\\d{8})?$",
-		sources: [ANTHROPIC_MODELS_DOC],
-	},
-	{
-		id: "claude-opus-4-8",
-		label: "Anthropic Claude Opus 4.8",
-		contextWindow: 1000000,
-		maxTokens: 128000,
-		reasoning: true,
-		thinkingLevelMap: anthropicExtendedMap(["xhigh", "max"]),
-		matches: ["claude-opus-4-7"],
-		pattern: "^claude-opus-4-[678](?:-\\d{8})?$",
-		sources: [ANTHROPIC_MODELS_DOC],
-	},
-	{
-		id: "claude-opus-4-5",
-		label: "Anthropic Claude Opus 4.5",
-		contextWindow: 200000,
-		maxTokens: 64000,
-		reasoning: true,
-		pattern: "^claude-opus-4-5(?:-\\d{8})?$",
-		sources: [ANTHROPIC_MODELS_DOC],
-	},
-	{
-		id: "claude-sonnet-4-5",
-		label: "Anthropic Claude Sonnet 4.5",
-		contextWindow: 1000000,
-		maxTokens: 64000,
-		reasoning: true,
-		matches: ["claude-sonnet-4-6"],
-		pattern: "^claude-sonnet-4-[56](?:-\\d{8})?$",
-		sources: [ANTHROPIC_MODELS_DOC],
-	},
-	{
-		id: "claude-haiku-4-5",
-		label: "Anthropic Claude Haiku 4.5",
-		contextWindow: 200000,
-		maxTokens: 64000,
-		reasoning: true,
-		pattern: "^claude-haiku-4-5(?:-\\d{8})?$",
-		sources: [ANTHROPIC_MODELS_DOC],
-	},
-
-	// --- Google Gemini ---
-	{
-		id: "gemini-3.8-flash",
-		label: "Google Gemini 3.8 Flash",
-		contextWindow: 1048576,
-		maxTokens: 65536,
-		reasoning: true,
-		matches: ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"],
-		sources: [GOOGLE_MODELS_DOC],
-	},
-	{
-		id: "gemini-3.1-pro-preview",
-		label: "Google Gemini 3.1 Pro",
-		contextWindow: 1048576,
-		maxTokens: 65536,
-		reasoning: true,
-		thinkingLevelMap: { off: null, minimal: null, low: "LOW", medium: null, high: "HIGH" },
-		matches: ["gemini-3.1-pro-preview-customtools"],
-		sources: [GOOGLE_MODELS_DOC],
-	},
-	{
-		id: "gemini-3.1-flash-lite",
-		label: "Google Gemini 3.1 Flash Lite",
-		contextWindow: 1048576,
-		maxTokens: 65536,
-		reasoning: true,
-		matches: ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview", "gemini-flash-lite-latest"],
-		sources: [GOOGLE_MODELS_DOC],
-	},
-	{
-		id: "gemini-2.5-pro",
-		label: "Google Gemini 2.5 Pro",
-		contextWindow: 1048576,
-		maxTokens: 65536,
-		reasoning: true,
-		matches: ["gemini-2.5-flash", "gemini-2.5-flash-lite"],
-		sources: [GOOGLE_MODELS_DOC],
-	},
-
 	// --- DeepSeek ---
 	{
 		id: "deepseek-v4-pro",

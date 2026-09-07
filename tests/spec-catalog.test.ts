@@ -8,19 +8,16 @@ import { KNOWN_MODEL_SPECS, lookupKnownModelSpec, parseTokenCountInput, UNKNOWN_
 import { promptModelSpecDefinitions } from "../src/model/commands.js";
 import { upsertProviderConfig } from "../src/model/models-json.js";
 
-test("lookupKnownModelSpec resolves every family the catalog documents", () => {
+test("lookupKnownModelSpec resolves every open-weight family the catalog documents", () => {
 	const expected = [
-		// majors
-		"gpt-5.6",
-		"gpt-5.6-sol",
-		"claude-opus-5",
-		"gemini-3.8-flash",
+		// open-weight families the catalog carries
 		"deepseek-v4-pro",
-		// captain-required families
 		"kimi-k2.6",
 		"glm-5.3",
 		"qwen3.8-max",
 		"mimo-v2.5",
+		"hy3",
+		"hy4-preview",
 		"MiniMax-M3",
 		"nvidia/nemotron-3-super-120b-a12b",
 	];
@@ -29,10 +26,20 @@ test("lookupKnownModelSpec resolves every family the catalog documents", () => {
 	}
 });
 
+test("closed-weight model ids are absent from the catalog and prompt at setup", () => {
+	// Closed-weight families never appear in the catalog: their providers
+	// ship their own runtime registries, so their ids must miss here and be
+	// handled as unknown (safe fallback prompts) rather than pre-filled.
+	for (const id of ["gpt-5.6", "gpt-6-astra", "claude-opus-5", "claude-fable-5-1", "gemini-3.8-flash", "grok-5"]) {
+		assert.equal(lookupKnownModelSpec(id), undefined, `${id} must not be cataloged`);
+	}
+	assert.ok(!KNOWN_MODEL_SPECS.some((spec) => /^(gpt-|claude-|gemini-|grok-)/i.test(spec.id)), "no closed-weight rows in the catalog");
+});
+
 test("lookupKnownModelSpec matches aliases and dated model ids case-insensitively", () => {
 	assert.equal(lookupKnownModelSpec("KIMI-K3")?.id, "kimi-k3");
 	assert.equal(lookupKnownModelSpec("k3")?.id, "kimi-k3");
-	assert.equal(lookupKnownModelSpec("claude-sonnet-4-5-20250929")?.id, "claude-sonnet-4-5");
+	assert.equal(lookupKnownModelSpec("MiniMax-M2.7-highspeed")?.id, "MiniMax-M2.7");
 	assert.equal(lookupKnownModelSpec("hy3-preview")?.label, "Hunyuan 3 (Tencent)");
 	assert.equal(lookupKnownModelSpec("hy4-preview-fp8")?.label, "Hunyuan 4 (Tencent)");
 	assert.equal(lookupKnownModelSpec("hunyuan-t3")?.id, "hy3");
@@ -86,10 +93,11 @@ test("flagship rows keep officially documented effort levels and context caps", 
 });
 
 test("specReasoningLevels reads the documented thinking-level map", () => {
-	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("gpt-5.6")), ["low", "medium", "high", "xhigh", "max"]);
+	// GLM-5.3 official docs: effort low / high / max, reasoning always on.
+	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("glm-5.3")), ["low", "high", "max"]);
 	// No explicit map: reasoning models keep the provider default levels.
 	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("kimi-k2.6")), ["low", "medium", "high"]);
-	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("gpt-4o")), []);
+	assert.deepEqual(specReasoningLevels(lookupKnownModelSpec("kimi-k2-0905-preview")), []);
 });
 
 test("buildThinkingLevelMap keeps documented effort values and pins unselected levels to null", () => {
