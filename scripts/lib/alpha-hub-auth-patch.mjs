@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 export const ALPHA_HUB_AUTH_014_SOURCE_CONTRACT = Object.freeze({
 	version: "0.1.4",
 	upstreamSha256: "5a16cb4f7fd0faf440951861699450f4d762ae7ef1919701fcded3d4f373ced6",
-	patchedSha256: "db6db244ed016f61d710fe2c100e3131821c50853883ee5fe6e1971bd9ca7fed",
+	patchedSha256: "be8ba16c328d422c32b594943ae033117e2eb02adef69bc8d90f6c240016f14e",
 });
 const LEGACY_AUTH_SHA256 = "fa1678c9a1e0f4d3240231728dadbd4b778ba9f9f4b937f235624df67346bf6c";
 const sourceDigest = (source) => createHash("sha256").update(source).digest("hex");
@@ -110,10 +110,12 @@ const CONFIGURABLE_CALLBACK_CONSTANTS = [
 	// The address the local callback server binds; the loopback redirect host
 	// binds itself unless ALPHAXIV_CALLBACK_BIND publishes it (e.g. 0.0.0.0
 	// inside Docker so a forwarded port reaches the server).
-	"const CALLBACK_BIND = process.env.ALPHAXIV_CALLBACK_BIND || (isLoopbackHost(CALLBACK_HOST) ? CALLBACK_HOST : '0.0.0.0');",
+	"const CALLBACK_BIND = process.env.ALPHAXIV_CALLBACK_BIND || CALLBACK_HOST.replace(/^\\[|\\]$/g, '');",
 	// The redirect URI is always http and loopback-only; cross-device
-	// completion uses the paste fallback.
-	"const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}/callback`;",
+	// completion uses the paste fallback. A bare IPv6 loopback host is
+	// bracketed in the URI so new URL parses it and browsers can navigate it.
+	"const REDIRECT_HOST = CALLBACK_HOST === '::1' ? '[::1]' : CALLBACK_HOST;",
+	"const REDIRECT_URI = `http://${REDIRECT_HOST}:${CALLBACK_PORT}/callback`;",
 ].join("\n");
 
 const CURRENT_LISTEN_TARGET = "    server.listen(CALLBACK_PORT, '127.0.0.1', () => {";

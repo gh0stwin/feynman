@@ -359,7 +359,9 @@ async function startServerOnFreePort(options: { env?: Record<string, string>; to
 			const server = await loaded.module.startCallbackServer();
 			return { ...loaded, server };
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+			// startCallbackServer wraps EADDRINUSE into a plain Error whose message
+			// names the port; detect it by message so the retry loop actually fires.
+			if (!/already in use/.test((error as Error).message ?? "")) throw error;
 		}
 	}
 	throw new Error("no free ephemeral port for tests");
@@ -385,6 +387,7 @@ async function startLoginOnFreePort(options: { tokenResponse?: Record<string, un
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		const loaded = loadPatchedAuthModule({ ...options, env: { ALPHAXIV_CALLBACK_PORT: randomPort() } });
 		const loginPromise = loaded.module.login();
+		const loginRejection = loginPromise.then(() => undefined, (reason: unknown) => reason);
 		try {
 			const authLine = await waitForStderrMatch(loaded.stderrLines, /Auth URL: (\S+)/);
 			const authUrl = authLine.match(/Auth URL: (\S+)/)?.[1] ?? "";
@@ -392,7 +395,14 @@ async function startLoginOnFreePort(options: { tokenResponse?: Record<string, un
 			return { loaded, loginPromise, authUrl };
 		} catch (error) {
 			loginPromise.catch(() => {});
-			if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+			// A port collision surfaces as the wrapped 'already in use' error on the
+			// login promise (the stderr wait times out first with its own message);
+			// detect either so the retry loop actually fires.
+			const loginError = await loginRejection;
+			const portInUse =
+				/already in use/.test((error as Error).message ?? "") ||
+				(loginError instanceof Error && /already in use/.test(loginError.message));
+			if (!portInUse) throw error;
 		}
 	}
 	throw new Error("no free ephemeral port for tests");
@@ -464,9 +474,12 @@ test("patched callback constants honor configured host, port, and bind", async (
 	for (const host of ["box.lan", "10.0.0.5", "[2001:db8::1]"]) {
 		assert.throws(() => loadPatchedAuthModule({ env: { ALPHAXIV_CALLBACK_HOST: host } }), /ALPHAXIV_CALLBACK_HOST must be a loopback host/);
 	}
-	for (const host of ["localhost", "127.0.0.1", "127.8.9.10", "::1"]) {
+	for (const host of ["localhost", "127.0.0.1", "127.8.9.10", "::1", "[::1]"]) {
 		const loaded = loadPatchedAuthModule({ env: { ALPHAXIV_CALLBACK_HOST: host } });
-		assert.equal(loaded.module.REDIRECT_URI, `http://${host}:9876/callback`);
+		const redirectHost = host === "::1" ? "[::1]" : host;
+		assert.equal(loaded.module.REDIRECT_URI, `http://${redirectHost}:9876/callback`);
+		assert.doesNotThrow(() => new URL(loaded.module.REDIRECT_URI));
+		assert.equal(loaded.module.CALLBACK_BIND, host.replace(/^\[|\]$/g, ""));
 	}
 
 	const published = await startServerOnFreePort({ env: { ALPHAXIV_CALLBACK_BIND: "0.0.0.0" } });
