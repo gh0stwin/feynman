@@ -152,7 +152,10 @@ test("personal 0.1.4 auth keeps upstream OAuth fixes and adds only retained Feyn
 	assert.match(patched, /ALPHAXIV_CALLBACK_BIND/);
 	assert.match(patched, /waitForCallback\(server, state\)/);
 	assert.match(patched, /waitForManualRedirect\(state\)/);
-	assert.match(patched, /Promise\.race\(\[waitForCallback\(server, state\), manualRedirect\]\)/);
+	assert.match(patched, /const callbackWait = waitForCallback\(server, state\)/);
+	assert.match(patched, /Promise\.race\(\[callbackWait, manualRedirect\]\)/);
+	assert.match(patched, /callbackWait\.cancel\(\);/);
+	assert.match(patched, /promise\.cancel = \(\) => \{[\s\S]*?clearTimeout\(timeout\);[\s\S]*?\};/);
 	assert.match(patched, /wslview/);
 	assert.match(patched, /Auth URL:/);
 	// Existing branding substitution targeted older simple HTML, not 0.1.3/0.1.4 templates.
@@ -223,6 +226,11 @@ type LoadedAuth = {
 	registerBodies: Array<{ redirect_uris?: string[] }>;
 	tokenBodies: URLSearchParams[];
 	authWrites: Array<Record<string, unknown>>;
+	timers: {
+		created: Array<{ handle: NodeJS.Timeout; delay: number | undefined }>;
+		cleared: Array<unknown>;
+	};
+	servers: Array<{ server: Server; closes: number }>;
 };
 
 function loadPatchedAuthModule(options: {
@@ -237,6 +245,34 @@ function loadPatchedAuthModule(options: {
 	const registerBodies: Array<{ redirect_uris?: string[] }> = [];
 	const tokenBodies: URLSearchParams[] = [];
 	const authWrites: Array<Record<string, unknown>> = [];
+	// Capture the module's real timers and servers with pass-through wrappers,
+	// so cleanup assertions observe actual behavior (the 120-second window stays
+	// live; only its clearing is observed).
+	const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+	const realClearTimeout = globalThis.clearTimeout.bind(globalThis);
+	const createdTimers: Array<{ handle: NodeJS.Timeout; delay: number | undefined }> = [];
+	const clearedTimers: Array<unknown> = [];
+	const timerStub = ((handler: () => void, delay?: number, ...args: never[]) => {
+		const handle = realSetTimeout(handler, delay, ...args) as unknown as NodeJS.Timeout;
+		createdTimers.push({ handle, delay });
+		return handle;
+	}) as unknown as typeof setTimeout;
+	const clearStub = ((handle?: NodeJS.Timeout) => {
+		clearedTimers.push(handle);
+		return realClearTimeout(handle);
+	}) as unknown as typeof clearTimeout;
+	const capturedServers: Array<{ server: Server; closes: number }> = [];
+	const serverStub = ((...args: Parameters<typeof createServer>) => {
+		const server = createServer(...args);
+		const originalClose = server.close.bind(server);
+		const record = { server, closes: 0 };
+		server.close = ((callback?: (error?: Error) => void) => {
+			record.closes += 1;
+			return originalClose(callback);
+		}) as Server["close"];
+		capturedServers.push(record);
+		return server;
+	}) as unknown as typeof createServer;
 	const tokenResponse = options.tokenResponse ?? { access_token: "test-access", refresh_token: "test-refresh", expires_in: 3600 };
 
 	const fetchStub = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -268,13 +304,13 @@ function loadPatchedAuthModule(options: {
 
 	const build = new Function(
 		"createHash", "randomBytes", "createServer", "readFileSync", "writeFileSync", "mkdirSync", "existsSync",
-		"join", "homedir", "execSync", "platform", "createInterface", "fetch", "process",
+		"join", "homedir", "execSync", "platform", "createInterface", "fetch", "process", "setTimeout", "clearTimeout",
 		`${moduleBody}\nreturn { REDIRECT_URI, CALLBACK_PORT, CALLBACK_HOST, CALLBACK_BIND, startCallbackServer, waitForCallback, parseManualRedirect, login };`,
 	);
 	const module = build(
 		createHash,
 		randomBytes,
-		createServer,
+		serverStub,
 		() => {
 			throw new Error("no auth file in test");
 		},
@@ -293,8 +329,10 @@ function loadPatchedAuthModule(options: {
 		createInterface,
 		fetchStub,
 		fakeProcess,
+		timerStub,
+		clearStub,
 	) as PatchedAuthModule;
-	return { module, stdin, stderrLines, openCommands, registerBodies, tokenBodies, authWrites };
+	return { module, stdin, stderrLines, openCommands, registerBodies, tokenBodies, authWrites, timers: { created: createdTimers, cleared: clearedTimers }, servers: capturedServers };
 }
 
 function randomPort(): string {
@@ -535,4 +573,47 @@ test("patched login waits for the browser callback even when stdin closes before
 	const result = await settleLogin(loginPromise, () => stdin.write(`http://127.0.0.1:${module.CALLBACK_PORT}/callback?code=browser-code&state=${state}\n`));
 	assert.deepEqual(result.tokens, { access_token: "test-access", refresh_token: "test-refresh", expires_in: 3600 });
 	assert.equal(tokenBodies[0]?.get("code"), "browser-code");
+});
+
+test("patched login clears the pending 120-second timer and closes the server when a pasted login wins", async () => {
+	const { loaded, loginPromise, authUrl } = await startLoginOnFreePort();
+	const { module, stdin, tokenBodies, timers, servers } = loaded;
+	const state = new URL(authUrl).searchParams.get("state");
+	assert.ok(state);
+	// Regression guard for the cross-device paste path: no HTTP callback ever
+	// reaches the server, so without completion cleanup its pending wait timer
+	// kept the CLI alive for the full window after a successful login.
+	const waitTimer = timers.created.find((entry) => entry.delay === 120000);
+	assert.ok(waitTimer, "login still creates the exact 120-second wait window");
+	assert.ok(!timers.cleared.includes(waitTimer.handle), "the window stays armed while the wait is pending");
+	stdin.write(`http://localhost:${module.CALLBACK_PORT}/callback?code=manual-code&state=${state}\n`);
+	const result = await settleLogin(loginPromise, () => stdin.write(`http://127.0.0.1:${module.CALLBACK_PORT}/callback?code=manual-code&state=${state}\n`));
+	assert.deepEqual(result.tokens, { access_token: "test-access", refresh_token: "test-refresh", expires_in: 3600 });
+	assert.equal(tokenBodies[0]?.get("code"), "manual-code");
+	// The wait settled through the paste path: the abandoned timer must be
+	// cleared and the callback server closed, so the CLI returns promptly.
+	assert.ok(timers.cleared.includes(waitTimer.handle));
+	const loginServer = servers[0];
+	assert.ok(loginServer);
+	assert.ok(loginServer.closes >= 1, "callback server is closed after a pasted login");
+	assert.equal(loginServer.server.listening, false);
+});
+
+test("patched login performs the same timer and server cleanup after a successful browser callback", async () => {
+	const { loaded, loginPromise, authUrl } = await startLoginOnFreePort();
+	const { module, stdin, tokenBodies, timers, servers } = loaded;
+	const state = new URL(authUrl).searchParams.get("state");
+	assert.ok(state);
+	const page = await httpGet(module.CALLBACK_PORT, `/callback?code=browser-code&state=${state}`);
+	assert.equal(page.status, 200);
+	const result = await settleLogin(loginPromise, () => stdin.write(`http://127.0.0.1:${module.CALLBACK_PORT}/callback?code=late&state=${state}\n`));
+	assert.deepEqual(result.tokens, { access_token: "test-access", refresh_token: "test-refresh", expires_in: 3600 });
+	assert.equal(tokenBodies[0]?.get("code"), "browser-code");
+	const waitTimer = timers.created.find((entry) => entry.delay === 120000);
+	assert.ok(waitTimer, "browser flow still creates the exact 120-second wait window");
+	assert.ok(timers.cleared.includes(waitTimer.handle));
+	const loginServer = servers[0];
+	assert.ok(loginServer);
+	assert.ok(loginServer.closes >= 1, "callback server is closed after a browser callback");
+	assert.equal(loginServer.server.listening, false);
 });

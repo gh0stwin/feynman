@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 export const ALPHA_HUB_AUTH_014_SOURCE_CONTRACT = Object.freeze({
 	version: "0.1.4",
 	upstreamSha256: "5a16cb4f7fd0faf440951861699450f4d762ae7ef1919701fcded3d4f373ced6",
-	patchedSha256: "2495fcd373936dde9c17a7bb1b93d2c719b07e8ce4b5efbffef2b6a43646a4a4",
+	patchedSha256: "db6db244ed016f61d710fe2c100e3131821c50853883ee5fe6e1971bd9ca7fed",
 });
 const LEGACY_AUTH_SHA256 = "fa1678c9a1e0f4d3240231728dadbd4b778ba9f9f4b937f235624df67346bf6c";
 const sourceDigest = (source) => createHash("sha256").update(source).digest("hex");
@@ -193,14 +193,55 @@ const MANUAL_REDIRECT_HELPERS = [
 
 const CURRENT_CALLBACK_CALL = "  const code = await waitForCallback(server, state);";
 const RACED_CALLBACK_WAIT = [
+	"  const callbackWait = waitForCallback(server, state);",
 	"  const manualRedirect = waitForManualRedirect(state);",
 	"  let code;",
 	"  try {",
-	"    code = await Promise.race([waitForCallback(server, state), manualRedirect]);",
+	"    code = await Promise.race([callbackWait, manualRedirect]);",
 	"  } finally {",
+	// Cleanup on completion, either path: the callback wait's own 120-second
+	// timeout timer stays ref'd until someone clears it (its handler branches
+	// clear it, but a paste-path win never reaches them), and an abandoned
+	// timer kept the CLI alive for the full window after a successful login.
+	"    callbackWait.cancel();",
 	"    manualRedirect.cancel();",
 	"    server.close();",
 	"  }",
+].join("\n");
+
+// waitForCallback holds the 120-second login-wait timer inside its Promise
+// executor, so nothing outside could clear it when the wait settles another
+// way (paste win, or an already-settled callback). Give the returned promise
+// a cancel that clears the abandoned timer; the wait window itself is
+// untouched - only completion cleanup is added.
+const CALLBACK_PROMISE_HEAD_TARGET = [
+	"function waitForCallback(server, expectedState) {",
+	"  return new Promise((resolve, reject) => {",
+	"    const timeout = setTimeout(() => {",
+].join("\n");
+const CALLBACK_PROMISE_HEAD_PATCHED = [
+	"function waitForCallback(server, expectedState) {",
+	"  let timeout;",
+	"  const promise = new Promise((resolve, reject) => {",
+	"    timeout = setTimeout(() => {",
+].join("\n");
+const CALLBACK_PROMISE_TAIL_TARGET = [
+	"        resolve(code);",
+	"      }",
+	"    });",
+	"  });",
+	"}",
+].join("\n");
+const CALLBACK_PROMISE_TAIL_PATCHED = [
+	"        resolve(code);",
+	"      }",
+	"    });",
+	"  });",
+	"  promise.cancel = () => {",
+	"    clearTimeout(timeout);",
+	"  };",
+	"  return promise;",
+	"}",
 ].join("\n");
 
 const CURRENT_READLINE_TARGET = "import { platform } from 'node:os';";
@@ -288,6 +329,12 @@ export function patchAlphaHubAuthSource(source, options = {}) {
 	}
 	if (patched.includes(CURRENT_READLINE_TARGET) && !patched.includes("createInterface } from 'node:readline'")) {
 		patched = patched.replace(CURRENT_READLINE_TARGET, CURRENT_READLINE_PATCHED);
+	}
+	if (patched.includes(CALLBACK_PROMISE_HEAD_TARGET)) {
+		patched = patched.replace(CALLBACK_PROMISE_HEAD_TARGET, CALLBACK_PROMISE_HEAD_PATCHED);
+	}
+	if (patched.includes(CALLBACK_PROMISE_TAIL_TARGET)) {
+		patched = patched.replace(CALLBACK_PROMISE_TAIL_TARGET, CALLBACK_PROMISE_TAIL_PATCHED);
 	}
 	if (patched.includes(CURRENT_CALLBACK_CALL)) {
 		patched = patched.replace(CURRENT_CALLBACK_CALL, RACED_CALLBACK_WAIT);
