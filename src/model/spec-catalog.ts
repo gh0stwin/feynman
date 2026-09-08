@@ -11,10 +11,13 @@
  * instead of guessing a number into the catalog.
  *
  * This is static, reviewable data a maintainer extends by PR; setup makes no
- * network calls against it. Values carry their official-doc source so a
- * reviewer can audit each row. Only values traceable to an official doc are
- * stored here; a value without official documentation stays undefined so
- * setup prompts the user for it instead of pre-filling a guess.
+ * network calls against it. Values carry their source so a reviewer can audit
+ * each row: vendor docs for first-party caps, and the cited public hosted
+ * catalogs (DeepInfra, Novita) where vendor docs stay silent. Only traceable
+ * values are stored; a value without any traceable source stays undefined so
+ * setup prompts the user for it instead of pre-filling a guess. Hosted-catalog
+ * caps are read dates-stamped in the row comments because hosted deployments
+ * can differ per provider.
  *
  * Scope: open-weight model families only (DeepSeek, Kimi, GLM, Qwen, MiMo,
  * Hunyuan, MiniMax, Nemotron). Closed-weight models (GPT, Claude, Gemini,
@@ -80,6 +83,10 @@ const HUNYUAN_HY3_REPO = "https://github.com/Tencent-Hunyuan/Hy3";
 const HUNYUAN_HY4_REPO = "https://github.com/Tencent-Hunyuan/Hy4-preview";
 const MINIMAX_DOCS = "https://platform.minimax.io/docs/guides/models-intro";
 const NVIDIA_NIM_DOCS = "https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b";
+// Public hosted catalogs carrying per-variant context and output caps; used
+// as cited sources for hosted deployments where vendor docs stay silent.
+const DEEPINFRA_CATALOG = "https://api.deepinfra.com/v1/openai/models";
+const NOVITA_MODELS = "https://api.novita.ai/v3/openai/models";
 
 // --- Tencent Hunyuan ---
 // Verified from the official Tencent-Hunyuan repos: reasoning effort is set
@@ -111,18 +118,26 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 	{
 		id: "deepseek-v4-pro",
 		label: "DeepSeek V4 Pro",
-		// Thinking mode and reasoning_effort are officially documented, but the
-		// exact context and max-completion caps are not; setup prompts for them.
+		// Thinking mode and reasoning_effort are officially documented, but
+		// first-party caps are not. Hosted-catalog values (read 2026-09-08):
+		// DeepInfra deepseek-ai/DeepSeek-V4-Pro 1048576/1048576; Novita hosts
+		// the same model with a 393216 output cap - deployment configs differ.
+		contextWindow: 1048576,
+		maxTokens: 1048576,
 		reasoning: true,
 		matches: ["deepseek-v4-pro-0813"],
-		sources: [DEEPSEEK_DOCS],
+		sources: [DEEPSEEK_DOCS, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "deepseek-v4-flash",
 		label: "DeepSeek V4 Flash",
+		// Hosted-catalog values (read 2026-09-08): DeepInfra 1048576/1048576
+		// for deepseek-ai/DeepSeek-V4-Flash; Novita hosts 393216 output.
+		contextWindow: 1048576,
+		maxTokens: 1048576,
 		reasoning: true,
 		matches: ["deepseek-v4-flash-0731", "deepseek-v4-flash-vision-exp"],
-		sources: [DEEPSEEK_DOCS],
+		sources: [DEEPSEEK_DOCS, DEEPINFRA_CATALOG],
 	},
 
 	// --- Kimi (Moonshot) ---
@@ -130,9 +145,11 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		id: "kimi-k3",
 		label: "Kimi K3 (Moonshot)",
 		// Official docs: 1M-token context window; reasoning_effort supports
-		// "low" / "high" / "max" (default "max"). Max completion tokens are
-		// not officially documented, so setup prompts for them.
+		// "low" / "high" / "max" (default "max"). Hosted catalogs agree on the
+		// caps (read 2026-09-08): DeepInfra and Novita both host K3 at
+		// 1048576 context / 1048576 output.
 		contextWindow: 1048576,
+		maxTokens: 1048576,
 		reasoning: true,
 		thinkingLevelMap: { off: null, minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
 		// Pi's openai-completions runtime drops reasoning_effort for Moonshot
@@ -147,8 +164,10 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		label: "Kimi K2.6 (Moonshot)",
 		// Official docs: 256K context window, thinking and non-thinking modes;
 		// per-model effort parameter values differ from K3, so the map is
-		// prompted, not assumed.
+		// prompted, not assumed. Hosted catalogs agree on the caps (read
+		// 2026-09-08): DeepInfra and Novita both host K2.6 at 262144/262144.
 		contextWindow: 262144,
+		maxTokens: 262144,
 		reasoning: true,
 		matches: ["kimi-k2.5", "kimi-k2-thinking", "kimi-k2-thinking-turbo"],
 		// The native Moonshot API drives thinking through a `thinking`
@@ -160,8 +179,11 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 	{
 		id: "kimi-k2.7-code",
 		label: "Kimi K2.7 Code (Moonshot)",
-		// Official docs: 256K context window with thinking mode.
+		// Official docs: 256K context window with thinking mode. Hosted
+		// catalogs agree (read 2026-09-08): DeepInfra and Novita both host
+		// K2.7-Code at 262144/262144.
 		contextWindow: 262144,
+		maxTokens: 262144,
 		reasoning: true,
 		matches: ["kimi-k2.7-code-highspeed", "kimi-for-coding", "kimi-for-coding-highspeed", "k3-256k"],
 		limitations: ["Reasoning-effort selection may not bind on the first-party Moonshot endpoint; kimi-k2.7-code needs no thinking parameter."],
@@ -170,17 +192,23 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 	{
 		id: "kimi-k2-0905-preview",
 		label: "Kimi K2 0905 (Moonshot)",
+		// Novita hosts moonshotai/kimi-k2-0905 at 262144/100352 (read
+		// 2026-09-08); DeepInfra does not carry this variant.
 		contextWindow: 262144,
+		maxTokens: 100352,
 		reasoning: false,
 		matches: ["kimi-k2-turbo-preview"],
-		sources: [MOONSHOT_DOCS],
+		sources: [MOONSHOT_DOCS, NOVITA_MODELS],
 	},
 	{
 		id: "kimi-k2-0711-preview",
 		label: "Kimi K2 0711 (Moonshot)",
+		// Novita hosts moonshotai/kimi-k2-instruct (the K2 131072-context
+		// variant) at 131072/100352 (read 2026-09-08); no deepinfra variant.
 		contextWindow: 131072,
+		maxTokens: 100352,
 		reasoning: false,
-		sources: [MOONSHOT_DOCS],
+		sources: [MOONSHOT_DOCS, NOVITA_MODELS],
 	},
 
 	// --- GLM (Zhipu / Z.AI) ---
@@ -205,30 +233,43 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 	{
 		id: "glm-5.2",
 		label: "GLM 5.2 (Z.AI)",
+		// Hosted catalogs (read 2026-09-08): Novita zai-org/glm-5.2 at
+		// 1048576 context / 131072 output (consistent with the GLM-5.3
+		// vendor output cap); DeepInfra hosts a 1048576/1048576 deployment.
+		contextWindow: 1048576,
+		maxTokens: 131072,
 		reasoning: true,
 		// "glm-5.2-highspeed" removed: the id does not exist (captain-verified).
 		// No readable official doc confirms an OpenAI-style reasoning_effort
 		// for 5.2 on the first-party endpoint, so a selected effort may not bind.
 		limitations: ["Reasoning-effort selection may not bind on the first-party Z.AI endpoint for this model."],
-		sources: [ZAI_DOCS],
+		sources: [ZAI_DOCS, NOVITA_MODELS, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "glm-5.1",
 		label: "GLM 5.1 (Z.AI)",
+		// Hosted-catalog values (read 2026-09-08, captain-verified): DeepInfra
+		// zai-org/GLM-5.1 at 202752/202752; Novita hosts 204800/131072 for
+		// the same id - hosted deployments differ.
+		contextWindow: 202752,
+		maxTokens: 202752,
 		reasoning: true,
 		matches: ["glm-5", "glm-5-turbo", "glm-4.7"],
 		limitations: ["Reasoning-effort selection may not bind on the first-party Z.AI endpoint for this model."],
-		sources: [ZAI_DOCS],
+		sources: [ZAI_DOCS, DEEPINFRA_CATALOG, NOVITA_MODELS],
 	},
 
 	// --- Qwen (Alibaba) ---
 	{
 		id: "qwen3.8-max",
 		label: "Qwen 3.8 Max (Alibaba)",
-		// Official docs list the model ids; numeric context/output caps are not
-		// documented on a directly readable page, so setup prompts for them.
+		// Hosted-catalog values (read 2026-09-08): Novita qwen/qwen3.8-max at
+		// 1000000/131072 (consistent with the official qwen3.8-flash family
+		// values); DeepInfra hosts a 256000/256000 deployment - differs.
+		contextWindow: 1000000,
+		maxTokens: 131072,
 		reasoning: true,
-		sources: [QWEN_DOCS],
+		sources: [QWEN_DOCS, NOVITA_MODELS, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "qwen3.8-flash",
@@ -268,11 +309,14 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		id: "mimo-v2.5",
 		label: "MiMo v2.5 (Xiaomi)",
 		// Official HF config.json: max_position_embeddings 1048576 for both
-		// variants; max completion tokens are not officially documented.
+		// variants. Hosted-catalog output cap (read 2026-09-08): Novita hosts
+		// both mimo-v2.5 and mimo-v2.5-pro at 1048576/131072 (consistent with
+		// the vendor context); DeepInfra deployments differ (262144/1048576).
 		contextWindow: 1048576,
+		maxTokens: 131072,
 		reasoning: true,
 		matches: ["mimo-v2.5-pro", "mimo-v2.5-pro-ultraspeed"],
-		sources: [XIAOMI_MIMO_DOCS],
+		sources: [XIAOMI_MIMO_DOCS, NOVITA_MODELS],
 	},
 
 	// --- Hunyuan 3 / Hunyuan 4 (Tencent) ---
@@ -281,17 +325,22 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		label: "Hunyuan 3 (Tencent)",
 		contextWindow: 262144,
 		// Tencent documents the context length and reasoning efforts but no
-		// official max-completion-token cap; setup prompts for it.
+		// official max-completion cap; DeepInfra hosts tencent/Hy3 at
+		// 262144/262144 (read 2026-09-08).
+		maxTokens: 262144,
 		reasoning: true,
 		...hunyuanThinkingLevelMap(["low", "high"]),
 		pattern: "^hy3(?:-preview)?(?:-fp8)?$",
 		matches: ["hunyuan-t3"],
-		sources: [HUNYUAN_HY3_REPO],
+		sources: [HUNYUAN_HY3_REPO, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "hy4-preview",
 		label: "Hunyuan 4 (Tencent)",
 		contextWindow: 1048576,
+		// No official max-completion cap is documented and neither hosted
+		// catalog carries a Hy4 variant (read 2026-09-08), so setup prompts
+		// for the output cap.
 		reasoning: true,
 		...hunyuanThinkingLevelMap(["high"]),
 		matches: ["hy4", "hy4-preview-fp8", "hunyuan-t4"],
@@ -302,22 +351,26 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 	{
 		id: "MiniMax-M3",
 		label: "MiniMax M3",
-		// Official docs: 1,000,000-token context window. Max completion tokens
-		// are not officially documented; setup prompts for them.
+		// Official docs: 1,000,000-token context window. Hosted-catalog output
+		// cap (read 2026-09-08): Novita minimax/minimax-m3 at 1000000/131072
+		// (context matches the vendor doc); DeepInfra hosts 524288/524288.
 		contextWindow: 1000000,
+		maxTokens: 131072,
 		reasoning: true,
 		matches: ["minimax-m3"],
-		sources: [MINIMAX_DOCS],
+		sources: [MINIMAX_DOCS, NOVITA_MODELS, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "MiniMax-M2.7",
 		label: "MiniMax M2.7",
-		// Official docs: 204,800 context window; max output is documented only
-		// for the older M2, not M2.7, so setup prompts for it.
+		// Official docs: 204,800 context window; hosted-catalog output cap
+		// (read 2026-09-08): Novita hosts minimax-m2.7 and
+		// minimax-m2.7-highspeed at 204800/131072.
 		contextWindow: 204800,
+		maxTokens: 131072,
 		reasoning: true,
 		matches: ["minimax-m2.7", "MiniMax-M2.7-highspeed", "minimax-m2.7-highspeed"],
-		sources: [MINIMAX_DOCS],
+		sources: [MINIMAX_DOCS, NOVITA_MODELS],
 	},
 
 	// --- Nemotron (NVIDIA) ---
@@ -325,31 +378,38 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		id: "nvidia/nemotron-3-super-120b-a12b",
 		label: "NVIDIA Nemotron 3 Super",
 		// Official build.nvidia.com specification: contextLength 1048576
-		// (serving defaults to 256k; the model spec is 1M). Max completion
-		// tokens are not officially documented, so setup prompts for them.
+		// (serving defaults to 256k; the model spec is 1M). Hosted-catalog
+		// output cap (read 2026-09-08): DeepInfra hosts the model at
+		// 262144/262144.
 		contextWindow: 1048576,
+		maxTokens: 262144,
 		reasoning: true,
 		matches: ["nemotron-3-super-120b-a12b"],
 		// The hosted build.nvidia.com API converts a requested effort client-side
 		// into chat_template_kwargs; a top-level reasoning_effort is not documented.
 		limitations: ["The hosted NVIDIA endpoint applies effort client-side via chat_template_kwargs; a top-level reasoning_effort may not be forwarded as-is."],
-		sources: [NVIDIA_NIM_DOCS],
+		sources: [NVIDIA_NIM_DOCS, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "nvidia/nemotron-3-ultra-550b-a55b",
 		label: "NVIDIA Nemotron 3 Ultra",
 		// Official build.nvidia.com specification: contextLength 1048576.
+		// Hosted-catalog output cap (read 2026-09-08): DeepInfra hosts the
+		// model at 262144/262144.
 		contextWindow: 1048576,
+		maxTokens: 262144,
 		reasoning: true,
 		matches: ["nemotron-3-ultra-550b-a55b"],
 		limitations: ["The hosted NVIDIA endpoint applies effort client-side via chat_template_kwargs; a top-level reasoning_effort may not be forwarded as-is."],
-		sources: [NVIDIA_NIM_DOCS],
+		sources: [NVIDIA_NIM_DOCS, DEEPINFRA_CATALOG],
 	},
 	{
 		id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
 		label: "NVIDIA Nemotron 3 Nano Omni",
 		// Official build.nvidia.com specification: contextLength 262144,
-		// omni-modal input (text, image, audio, video).
+		// omni-modal input (text, image, audio, video). The hosted catalogs
+		// carry no matching omni variant (read 2026-09-08), so setup prompts
+		// for the output cap.
 		contextWindow: 262144,
 		reasoning: true,
 		matches: ["nemotron-3-nano-omni-30b-a3b-reasoning"],
