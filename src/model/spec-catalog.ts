@@ -123,7 +123,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		// DeepInfra deepseek-ai/DeepSeek-V4-Pro 1048576/1048576; Novita hosts
 		// the same model with a 393216 output cap - deployment configs differ.
 		contextWindow: 1048576,
-		maxTokens: 1048576,
+		maxTokens: 393216,
 		reasoning: true,
 		matches: ["deepseek-v4-pro-0813"],
 		sources: [DEEPSEEK_DOCS, DEEPINFRA_CATALOG],
@@ -134,7 +134,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		// Hosted-catalog values (read 2026-09-08): DeepInfra 1048576/1048576
 		// for deepseek-ai/DeepSeek-V4-Flash; Novita hosts 393216 output.
 		contextWindow: 1048576,
-		maxTokens: 1048576,
+		maxTokens: 393216,
 		reasoning: true,
 		matches: ["deepseek-v4-flash-0731", "deepseek-v4-flash-vision-exp"],
 		sources: [DEEPSEEK_DOCS, DEEPINFRA_CATALOG],
@@ -217,7 +217,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		label: "GLM 5.3 (Z.AI)",
 		// Official docs: 1M context, 128K max output; reasoning is always on
 		// (disabling no longer supported) with effort levels low / high / max.
-		contextWindow: 1000000,
+		contextWindow: 1048576,
 		maxTokens: 131072,
 		reasoning: true,
 		thinkingLevelMap: { off: null, minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
@@ -338,6 +338,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		id: "hy4-preview",
 		label: "Hunyuan 4 (Tencent)",
 		contextWindow: 1048576,
+		maxTokens: 64000,
 		// No official max-completion cap is documented and neither hosted
 		// catalog carries a Hy4 variant (read 2026-09-08), so setup prompts
 		// for the output cap.
@@ -354,7 +355,7 @@ export const KNOWN_MODEL_SPECS: KnownModelSpec[] = [
 		// Official docs: 1,000,000-token context window. Hosted-catalog output
 		// cap (read 2026-09-08): Novita minimax/minimax-m3 at 1000000/131072
 		// (context matches the vendor doc); DeepInfra hosts 524288/524288.
-		contextWindow: 1000000,
+		contextWindow: 1048576,
 		maxTokens: 131072,
 		reasoning: true,
 		matches: ["minimax-m3"],
