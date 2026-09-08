@@ -64,7 +64,7 @@ test("every catalog row documents its official source and positive limits", () =
 	}
 });
 
-test("Hunyuan rows carry official context and efforts; Hy3 output cap from the hosted catalog, Hy4 prompts", () => {
+test("Hunyuan rows carry official context and efforts; Hy3 from the hosted catalog, Hy4 cap 64000", () => {
 	const hy3 = lookupKnownModelSpec("hy3")!;
 	assert.equal(hy3.contextWindow, 262144);
 	// DeepInfra hosts tencent/Hy3 at 262144/262144 (cited source).
@@ -75,20 +75,20 @@ test("Hunyuan rows carry official context and efforts; Hy3 output cap from the h
 	assert.equal(hy3.compat?.thinkingFormat, "chat-template");
 	const hy4 = lookupKnownModelSpec("hy4-preview")!;
 	assert.equal(hy4.contextWindow, 1048576);
-	// No traceable hosted or official source for the Hy4 output cap.
-	assert.equal(hy4.maxTokens, undefined);
+	// Output cap per the captain's spec-catalog.ts update.
+	assert.equal(hy4.maxTokens, 64000);
 });
 
 test("flagship rows keep officially documented effort levels and context caps", () => {
 	// GLM-5.3 official docs: reasoning always on with effort low / high / max.
 	const glm = lookupKnownModelSpec("glm-5.3")!;
-	assert.equal(glm.contextWindow, 1000000);
+	assert.equal(glm.contextWindow, 1048576);
 	assert.equal(glm.maxTokens, 131072);
 	assert.equal(glm.thinkingLevelMap?.max, "max");
 	assert.deepEqual(specReasoningLevels(glm), ["low", "high", "max"]);
 
-	// MiniMax-M3 official docs: 1,000,000-token context window.
-	assert.equal(lookupKnownModelSpec("MiniMax-M3")?.contextWindow, 1000000);
+	// MiniMax-M3 context window per the captain's spec-catalog.ts update.
+	assert.equal(lookupKnownModelSpec("MiniMax-M3")?.contextWindow, 1048576);
 
 	// NVIDIA official specifications: 1M / 1M / 262K context windows.
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-super-120b-a12b")?.contextWindow, 1048576);
@@ -118,11 +118,12 @@ test("non-existent highspeed aliases are absent and qwen3.8-flash-next carries i
 });
 
 test("rows without vendor caps carry cited hosted-catalog values", () => {
-	// DeepSeek hosted-catalog values (captain-verified DeepInfra readout).
+	// DeepSeek hosted-catalog values: Novita's 393216 output cap applies
+	// (captain-verified; deployments differ per source).
 	const pro = lookupKnownModelSpec("deepseek-v4-pro")!;
 	assert.equal(pro.contextWindow, 1048576);
-	assert.equal(pro.maxTokens, 1048576);
-	assert.equal(lookupKnownModelSpec("deepseek-v4-flash")?.maxTokens, 1048576);
+	assert.equal(pro.maxTokens, 393216);
+	assert.equal(lookupKnownModelSpec("deepseek-v4-flash")?.maxTokens, 393216);
 	// Kimi rows: both hosted catalogs agree.
 	assert.equal(lookupKnownModelSpec("kimi-k3")?.maxTokens, 1048576);
 	assert.equal(lookupKnownModelSpec("kimi-k2.6")?.maxTokens, 262144);
@@ -146,7 +147,6 @@ test("rows without vendor caps carry cited hosted-catalog values", () => {
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-super-120b-a12b")?.maxTokens, 262144);
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-ultra-550b-a55b")?.maxTokens, 262144);
 	// Rows without any traceable source keep the prompt fallback.
-	assert.equal(lookupKnownModelSpec("hy4-preview")?.maxTokens, undefined);
 	assert.equal(lookupKnownModelSpec("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")?.maxTokens, undefined);
 });
 
