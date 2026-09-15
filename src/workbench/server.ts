@@ -41,7 +41,7 @@ import { buildWorkbenchState, loadWorkbenchModelStatus, readWorkbenchFile, readW
 import { ensureOpenScienceSeedFixtures } from "./seed-fixtures.js";
 import { readWorkbenchSettings, removeWorkbenchSettingsRecord, upsertWorkbenchSettingsRecord, type WorkbenchSettingsCollection, type WorkbenchCustomConnector } from "./settings-store.js";
 import { diffArtifactVersionSnapshot, restoreArtifactVersionSnapshot } from "./artifact-snapshot-actions.js";
-import { hostForUrl, logWorkbenchRequestError, normalizeHost, requestCookie, requestOrigin, sendWorkbenchRequestError } from "./server-utils.js";
+import { hostForUrl, logWorkbenchRequestError, normalizeHost, printWorkbenchOpenHint, requestCookie, requestOrigin, sendWorkbenchRequestError } from "./server-utils.js";
 import { sendWorkbenchWeb } from "./static-shell.js";
 import { mutateWorkbenchTranscriptAnnotation } from "./transcript-annotations.js";
 import type { WorkbenchArtifactVersion, WorkbenchPlanStepStatus } from "./types.js";
@@ -1173,20 +1173,10 @@ export async function startWorkbenchServer(options: WorkbenchServerOptions): Pro
 }
 
 export async function serveWorkbench(options: ServeWorkbenchOptions): Promise<void> {
-	const boundHost = normalizeHost(options.host);
 	const handle = await startWorkbenchServer(options);
 	console.log("Feynman workbench running");
 	console.log(`URL: ${handle.openUrl}`);
-	if (boundHost === "0.0.0.0") {
-		// A bind-all address exposes the server beyond loopback. Repeat the
-		// URL with a loopback address so it is clickable on this machine;
-		// other machines reach the same server at
-		// http://<this machine's address>:<port>.
-		const hostOpenUrl = new URL(handle.openUrl);
-		hostOpenUrl.hostname = "localhost";
-		console.log(`Open on this machine: ${hostOpenUrl.toString()}`);
-		console.log(`From another machine on your network: http://<this machine's address>:${hostOpenUrl.port}/${hostOpenUrl.search}`);
-	}
+	printWorkbenchOpenHint(options.host, handle.openUrl);
 	console.log(`Workspace: ${options.workingDir}`);
 	console.log("Press Ctrl+C to stop.");
 	if (options.shouldOpen !== false) {
