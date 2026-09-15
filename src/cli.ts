@@ -855,6 +855,17 @@ export function formatPaperAccessCliSummaryLines(result: PaperAccessResult): str
 	];
 }
 
+// Workbench serve inputs resolve from the CLI flag first, then the
+// FEYNMAN_HOST / FEYNMAN_PORT environment variables (useful in launch
+// setups where editing the command line is awkward).
+export function resolveWorkbenchHostInput(value: string | undefined): string | undefined {
+	return value ?? process.env.FEYNMAN_HOST;
+}
+
+export function resolveWorkbenchPortInput(value: string | undefined): string | undefined {
+	return value ?? process.env.FEYNMAN_PORT;
+}
+
 export async function main(): Promise<void> {
 	const here = dirname(fileURLToPath(import.meta.url));
 	const appRoot = resolve(here, "..");
@@ -1082,8 +1093,8 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 			authPath: feynmanAuthPath,
 			workingDir,
 			version: feynmanVersion,
-			host: values.host,
-			port: parseWorkbenchPort(values.port),
+			host: resolveWorkbenchHostInput(values.host),
+			port: parseWorkbenchPort(resolveWorkbenchPortInput(values.port)),
 			requireAuth: values["no-auth"] !== true,
 			shouldOpen: values["no-open"] !== true,
 		});

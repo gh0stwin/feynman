@@ -41,6 +41,17 @@ export function normalizeHost(value: string | undefined): string {
 	return host || "127.0.0.1";
 }
 
+export function printWorkbenchOpenHint(host: string | undefined, openUrl: string): void {
+	if (normalizeHost(host) !== "0.0.0.0") return;
+	// A bind-all address exposes the server beyond loopback. Repeat the URL with
+	// a loopback address so it is clickable on this machine; other machines
+	// reach the same server at http://<this machine's address>:<port>.
+	const hostOpenUrl = new URL(openUrl);
+	hostOpenUrl.hostname = "localhost";
+	console.log(`Open on this machine: ${hostOpenUrl.toString()}`);
+	console.log(`From another machine on your network: http://<this machine's address>:${hostOpenUrl.port}/${hostOpenUrl.search}`);
+}
+
 export function logWorkbenchRequestError(error: unknown): void {
 	const message = error instanceof Error ? error.message : String(error);
 	const name = error instanceof Error && STANDARD_ERROR_NAMES.has(error.name) ? error.name : error instanceof Error ? "Error" : typeof error;

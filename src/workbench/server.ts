@@ -41,7 +41,7 @@ import { buildWorkbenchState, loadWorkbenchModelStatus, readWorkbenchFile, readW
 import { ensureOpenScienceSeedFixtures } from "./seed-fixtures.js";
 import { readWorkbenchSettings, removeWorkbenchSettingsRecord, upsertWorkbenchSettingsRecord, type WorkbenchSettingsCollection, type WorkbenchCustomConnector } from "./settings-store.js";
 import { diffArtifactVersionSnapshot, restoreArtifactVersionSnapshot } from "./artifact-snapshot-actions.js";
-import { hostForUrl, logWorkbenchRequestError, normalizeHost, requestCookie, requestOrigin, sendWorkbenchRequestError } from "./server-utils.js";
+import { hostForUrl, logWorkbenchRequestError, normalizeHost, printWorkbenchOpenHint, requestCookie, requestOrigin, sendWorkbenchRequestError } from "./server-utils.js";
 import { sendWorkbenchWeb } from "./static-shell.js";
 import { mutateWorkbenchTranscriptAnnotation } from "./transcript-annotations.js";
 import type { WorkbenchArtifactVersion, WorkbenchPlanStepStatus } from "./types.js";
@@ -1176,6 +1176,7 @@ export async function serveWorkbench(options: ServeWorkbenchOptions): Promise<vo
 	const handle = await startWorkbenchServer(options);
 	console.log("Feynman workbench running");
 	console.log(`URL: ${handle.openUrl}`);
+	printWorkbenchOpenHint(options.host, handle.openUrl);
 	console.log(`Workspace: ${options.workingDir}`);
 	console.log("Press Ctrl+C to stop.");
 	if (options.shouldOpen !== false) {
