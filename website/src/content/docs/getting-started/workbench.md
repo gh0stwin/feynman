@@ -13,6 +13,18 @@ feynman serve
 
 The command starts a local server, prints an authenticated localhost URL, and opens the workbench. The URL token is local to that server process. For trusted local testing, run `feynman serve --no-auth` to print a plain localhost URL with no token.
 
+## Running the workbench in Docker
+
+`feynman serve` binds `127.0.0.1` by default, so inside a container the workbench is only reachable from the container itself. Docker's published ports (`-p`) forward host traffic to the container's non-loopback interface, which a loopback-bound server refuses. To reach the workbench from the host, bind all interfaces and publish the port:
+
+```bash
+docker run -p 6175:6175 <image> feynman serve --host 0.0.0.0 --port 6175
+```
+
+Then open `http://localhost:6175/?token=<token printed by serve>` on the host. `FEYNMAN_HOST` and `FEYNMAN_PORT` environment variables provide the same values when editing the command line is awkward (for example with `docker run -e` or compose); CLI flags win when both are set.
+
+Never combine `--host 0.0.0.0` (or `FEYNMAN_HOST=0.0.0.0`) with `--no-auth` outside a trusted network: that publishes an unauthenticated workbench to every interface.
+
 ## What the workbench contains
 
 - **Projects and sessions** -- Create projects, open existing research sessions, continue Pi-backed chat, and keep project metadata, frame rows, frame message rows, frame backfill health rows, and run state tied to the workspace.

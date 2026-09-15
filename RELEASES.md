@@ -6,6 +6,13 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+### Workbench reachable from Docker hosts
+
+- `feynman serve` now shows its bind options where users look for them: the previously hidden `--host <addr>` flag appears in the `feynman --help` command list and in the new README/website "Running the workbench in Docker" walkthrough. A server bound with `--host 0.0.0.0` was already reachable through a published Docker port; only the documentation was missing.
+- New `FEYNMAN_HOST` and `FEYNMAN_PORT` environment variables provide the workbench bind address and port when editing the command line is awkward (`docker run -e`, compose). CLI flags take precedence, and the secure `127.0.0.1` default and token auth behavior are unchanged.
+- When the server binds `0.0.0.0`, the startup output now also prints a host-actionable `Open on your host: http://localhost:<port>/?token=...` URL next to the bind URL.
+- Container guidance: run `feynman serve --host 0.0.0.0 --port <port>` with the port published (`docker run -p <port>:<port> ...`) and open `http://localhost:<published-port>/?token=<token>` on the host. Never combine `--host 0.0.0.0` with `--no-auth` outside a trusted network.
+
 ### Complete alphaXiv login from a different device
 
 - Cross-device login completion is now possible where it previously was not: the login flow used to hard-assume the browsing device and the token-storage device were the same machine. Complete the alphaXiv sign-in on any device, then paste the browser's final `127.0.0.1:...?code=...` address into the waiting CLI, which validates the OAuth state, extracts the token from it, and stores credentials on the device running Feynman. The CLI shows a `Paste the redirect URL:` prompt while it waits, so the waiting state is visible.

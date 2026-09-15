@@ -174,6 +174,20 @@ $ feynman recipe "fine-tune a small model for math reasoning"
 
 ---
 
+### Running the workbench in Docker
+
+`feynman serve` binds `127.0.0.1` by default, so inside a container the workbench is only reachable from the container itself. To reach it from the host, bind all interfaces and publish the port:
+
+```bash
+docker run -p 6175:6175 <image> feynman serve --host 0.0.0.0 --port 6175
+```
+
+Then open `http://localhost:6175/?token=<token printed by serve>` on the host. `FEYNMAN_HOST` and `FEYNMAN_PORT` environment variables provide the same values when editing the command line is awkward (for example with `docker run -e` or compose); CLI flags win when both are set.
+
+Never combine `--host 0.0.0.0` (or `FEYNMAN_HOST=0.0.0.0`) with `--no-auth` outside a trusted network: that publishes an unauthenticated workbench to every interface.
+
+---
+
 ### Workflows
 
 Ask naturally or use slash commands as shortcuts.

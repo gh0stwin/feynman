@@ -1173,9 +1173,17 @@ export async function startWorkbenchServer(options: WorkbenchServerOptions): Pro
 }
 
 export async function serveWorkbench(options: ServeWorkbenchOptions): Promise<void> {
+	const boundHost = normalizeHost(options.host);
 	const handle = await startWorkbenchServer(options);
 	console.log("Feynman workbench running");
 	console.log(`URL: ${handle.openUrl}`);
+	if (boundHost === "0.0.0.0") {
+		// The bind-all URL is not clickable from outside the container or
+		// machine; repeat it with a host-actionable address.
+		const hostOpenUrl = new URL(handle.openUrl);
+		hostOpenUrl.hostname = "localhost";
+		console.log(`Open on your host: ${hostOpenUrl.toString()}`);
+	}
 	console.log(`Workspace: ${options.workingDir}`);
 	console.log("Press Ctrl+C to stop.");
 	if (options.shouldOpen !== false) {
