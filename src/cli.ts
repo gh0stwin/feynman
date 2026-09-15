@@ -856,8 +856,8 @@ export function formatPaperAccessCliSummaryLines(result: PaperAccessResult): str
 }
 
 // Workbench serve inputs resolve from the CLI flag first, then the
-// FEYNMAN_HOST / FEYNMAN_PORT environment variables (useful for Docker
-// and compose where editing the command line is awkward).
+// FEYNMAN_HOST / FEYNMAN_PORT environment variables (useful in launch
+// setups where editing the command line is awkward).
 export function resolveWorkbenchHostInput(value: string | undefined): string | undefined {
 	return value ?? process.env.FEYNMAN_HOST;
 }

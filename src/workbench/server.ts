@@ -1178,11 +1178,14 @@ export async function serveWorkbench(options: ServeWorkbenchOptions): Promise<vo
 	console.log("Feynman workbench running");
 	console.log(`URL: ${handle.openUrl}`);
 	if (boundHost === "0.0.0.0") {
-		// The bind-all URL is not clickable from outside the container or
-		// machine; repeat it with a host-actionable address.
+		// A bind-all address exposes the server beyond loopback. Repeat the
+		// URL with a loopback address so it is clickable on this machine;
+		// other machines reach the same server at
+		// http://<this machine's address>:<port>.
 		const hostOpenUrl = new URL(handle.openUrl);
 		hostOpenUrl.hostname = "localhost";
-		console.log(`Open on your host: ${hostOpenUrl.toString()}`);
+		console.log(`Open on this machine: ${hostOpenUrl.toString()}`);
+		console.log(`From another machine on your network: http://<this machine's address>:${hostOpenUrl.port}/${hostOpenUrl.search}`);
 	}
 	console.log(`Workspace: ${options.workingDir}`);
 	console.log("Press Ctrl+C to stop.");
