@@ -34,8 +34,8 @@ test("serve host input falls back to FEYNMAN_HOST when no flag is given", () => 
 
 test("serve port input prefers the CLI flag over FEYNMAN_PORT and still validates", () => {
 	withEnv("FEYNMAN_PORT", "9999", () => {
-		assert.equal(resolveWorkbenchPortInput("6175"), "6175");
-		assert.equal(parseWorkbenchPort(resolveWorkbenchPortInput("6175")), 6175);
+		assert.equal(resolveWorkbenchPortInput("6174"), "6174");
+		assert.equal(parseWorkbenchPort(resolveWorkbenchPortInput("6174")), 6174);
 	});
 });
 
