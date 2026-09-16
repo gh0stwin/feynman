@@ -6400,3 +6400,126 @@ button {
 	border: 1px solid var(--cs-border);
 	color: var(--cs-ink-soft);
 }
+
+/* --- Markdown message content ---
+   Chat message bodies render untrusted markdown via ChatMarkdown. Styled with
+   the Claude Science parity variables so it reads correctly on both the light
+   re-skin and the legacy dark bubble (the fallbacks are the legacy colors). */
+.message-markdown {
+	display: grid;
+	gap: 8px;
+	font-size: 14px;
+	line-height: 1.55;
+	color: var(--cs-ink, #edf4e8);
+}
+.message-markdown > :first-child {
+	margin-top: 0;
+}
+.message-markdown > :last-child {
+	margin-bottom: 0;
+}
+.message-markdown p {
+	margin: 0;
+	/* Markdown owns the line breaks now; pre-wrap would double-render soft wraps. */
+	white-space: normal;
+	overflow-wrap: anywhere;
+	font-size: 14px;
+	line-height: 1.55;
+	color: inherit;
+}
+.message-markdown h1,
+.message-markdown h2,
+.message-markdown h3,
+.message-markdown h4,
+.message-markdown h5,
+.message-markdown h6 {
+	margin: 6px 0 0;
+	font-size: 14px;
+	line-height: 1.45;
+	font-weight: 700;
+	color: inherit;
+}
+.message-markdown h1 {
+	font-size: 16px;
+}
+.message-markdown h2 {
+	font-size: 15px;
+}
+.message-markdown ul,
+.message-markdown ol {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding-left: 24px;
+	font-size: 14px;
+	line-height: 1.55;
+	color: inherit;
+}
+.message-markdown li > ul,
+.message-markdown li > ol {
+	margin-top: 4px;
+}
+.message-markdown li > p {
+	margin: 0;
+}
+.message-markdown li::marker {
+	color: var(--cs-muted, #98a38f);
+}
+.message-markdown blockquote {
+	margin: 0;
+	border-left: 3px solid var(--cs-border-strong, #3a4237);
+	padding: 2px 12px;
+	color: var(--cs-muted, #b9c6b0);
+}
+.message-markdown a {
+	color: var(--cs-accent, #7fb069);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.message-markdown code {
+	border: 1px solid var(--cs-border, #3a4237);
+	border-radius: 5px;
+	padding: 1px 5px;
+	font: 12.5px/1.5 "SFMono-Regular", Consolas, monospace;
+	background: var(--cs-subtle, #2a3328);
+	color: var(--cs-ink, #dce8d4);
+}
+.message-markdown pre {
+	margin: 0;
+	border: 1px solid var(--cs-border, #3a4237);
+	border-radius: 8px;
+	padding: 9px 11px;
+	overflow-x: auto;
+	font: 12px/1.5 "SFMono-Regular", Consolas, monospace;
+	background: var(--cs-subtle, #161a13);
+	color: var(--cs-ink, #dce8d4);
+}
+.message-markdown pre code {
+	border: 0;
+	padding: 0;
+	font: inherit;
+	background: transparent;
+	color: inherit;
+}
+.message-markdown hr {
+	margin: 4px 0;
+	border: 0;
+	border-top: 1px solid var(--cs-border, #3a4237);
+}
+.message-markdown table {
+	border-collapse: collapse;
+	font-size: 13px;
+	color: inherit;
+}
+.message-markdown th,
+.message-markdown td {
+	border: 1px solid var(--cs-border, #3a4237);
+	padding: 4px 8px;
+	text-align: left;
+}
+.message-markdown th {
+	background: var(--cs-subtle, #2a3328);
+}
+.message-markdown img {
+	max-width: 100%;
+}
