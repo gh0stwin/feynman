@@ -9,6 +9,10 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+### Workbench chat completion signal
+
+- Workbench chat no longer marks a message finished while the agent is still working. Completion now derives from pi's `agent_settled` lifecycle event (which also covers retries and queued continuations) instead of mid-turn `message_end` events, so the turn stops showing as complete only when pi is truly idle.
+
 ## v0.3.49 - 2026-09-06
 
 ### Research runtime refresh

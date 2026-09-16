@@ -6,6 +6,10 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+### Workbench chat completion signal
+
+- Workbench chat no longer marks a message finished while the agent is still working. Completion now derives from pi's `agent_settled` lifecycle event (which also covers retries and queued continuations) instead of mid-turn `message_end` events, so the turn stops showing as complete only when pi is truly idle.
+
 ### Workbench reachable from Docker hosts
 
 - `feynman serve` now shows its bind options where users look for them: the previously hidden `--host <addr>` flag appears in the `feynman --help` command list and in the new README/website "Running the workbench in Docker" walkthrough. A server bound with `--host 0.0.0.0` was already reachable through a published Docker port; only the documentation was missing.
