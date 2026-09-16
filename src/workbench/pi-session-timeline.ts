@@ -577,7 +577,7 @@ function pageForSlice(entries: WorkbenchPiTimelineEntry[], start: number, end: n
 		...(page.length ? { firstSeq: page[0]!.seq, lastSeq: page[page.length - 1]!.seq } : {}),
 		hasOlder,
 		// Empty pages (cursor at the stream edge) still expose the resume id.
-		...(hasOlder ? { olderCursor: (page[0] ?? entries[start])!.id } : {}),
+		...(hasOlder && start < total ? { olderCursor: (page[0] ?? entries[start])!.id } : {}),
 		hasNewer,
 		...(hasNewer ? { newerCursor: (page[page.length - 1] ?? entries[end])!.id } : {}),
 	};

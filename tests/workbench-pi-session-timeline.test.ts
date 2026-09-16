@@ -329,6 +329,16 @@ test("timeline pagination serves incremental tail updates with after cursors", (
 	);
 	assert.equal(after.pagination.hasNewer, false);
 	assert.equal(after.pagination.total, entries.length);
+
+	// Polling after the last known entry while no new entry has flushed yet must
+	// return a clean empty page, not crash.
+	const last = entries.at(-1)!;
+	const poll = paginateTimelinePage(entries, { after: last.id, limit: 100 });
+	assert.deepEqual(poll.entries, []);
+	assert.equal(poll.pagination.count, 0);
+	assert.equal(poll.pagination.hasNewer, false);
+	assert.equal(poll.pagination.hasOlder, true);
+	assert.equal(poll.pagination.total, entries.length);
 });
 
 test("timeline pagination respects the page content budget and handles unknown cursors cleanly", () => {
