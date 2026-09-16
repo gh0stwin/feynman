@@ -696,7 +696,11 @@ button {
 }
 
 .message.user .message-body {
-	background: #223020;
+	/* Light re-skin (see "Claude Science parity" below) renders message text in
+	   near-black --cs-ink, so the legacy dark-green user bubble must become a
+	   light tint of the same green family to keep text readable. */
+	background: var(--cs-accent-tint);
+	border-color: #d8e4d5;
 }
 
 .message-meta {
