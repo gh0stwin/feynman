@@ -168,6 +168,7 @@ import {
 	type ComposerSuggestion,
 	type ComposerTrigger,
 } from "./composer.js";
+import { ChatMarkdown } from "./chat-markdown.js";
 import { PdfArtifactPreview } from "./pdf-preview.js";
 import {
 	filterResourceGroups,
@@ -3182,7 +3183,13 @@ function App() {
 													<span>{chatMessage.status}</span>
 												</span>
 											</div>
-											<p data-transcript-content>{chatMessage.content || "No content recorded yet."}</p>
+											<div className="message-markdown" data-transcript-content>
+												{chatMessage.content ? (
+													<ChatMarkdown messageId={chatMessage.id} content={chatMessage.content} />
+												) : (
+													<p>No content recorded yet.</p>
+												)}
+											</div>
 											{transcriptAnnotations.length ? (
 												<div className="transcript-annotations" data-testid="transcript-annotations">
 													{transcriptAnnotations.map((annotation) => (
