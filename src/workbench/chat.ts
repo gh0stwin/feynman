@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 
 import {
@@ -235,8 +235,20 @@ function readSessionPath(path: string): WorkbenchChatSession {
 }
 
 function writeSessionPath(path: string, session: WorkbenchChatSession): void {
+	writeSessionFileAtomic(path, `${JSON.stringify(session, null, 2)}\n`);
+}
+
+/**
+ * Atomic session-file write: materialize the full JSON at `<path>.tmp` and
+ * rename it onto `<path>`. POSIX rename is atomic, so concurrent readers of
+ * `<path>` always observe either the previous or the new complete session
+ * file, never a torn mid-write state.
+ */
+function writeSessionFileAtomic(path: string, content: string): void {
 	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, `${JSON.stringify(session, null, 2)}\n`, "utf8");
+	const tmpPath = `${path}.tmp`;
+	writeFileSync(tmpPath, content, "utf8");
+	renameSync(tmpPath, path);
 }
 
 function mergeExternalSessionMessages(path: string, session: WorkbenchChatSession): WorkbenchChatSession {
@@ -253,10 +265,50 @@ function mergeExternalSessionMessages(path: string, session: WorkbenchChatSessio
 	};
 }
 
-function writeStreamSessionPath(path: string, session: WorkbenchChatSession): WorkbenchChatSession {
-	const merged = mergeExternalSessionMessages(path, session);
-	writeSessionPath(path, merged);
-	return merged;
+export const WORKBENCH_STREAM_WRITE_COALESCE_MS = 250;
+
+export type WorkbenchStreamWriteCoalescer = {
+	/**
+	 * Fold external messages into `session`, then persist it to disk unless the
+	 * stream is still inside the coalescing window. `toolEventChanged` forces an
+	 * immediate write so tool activity is never throttled away.
+	 */
+	write: (session: WorkbenchChatSession, options?: { toolEventChanged?: boolean }) => WorkbenchChatSession;
+	/** Fold external messages and always persist (turn/tool boundary). */
+	flush: (session: WorkbenchChatSession) => WorkbenchChatSession;
+	/** Disk writes actually performed; coalesced-away updates are not counted. */
+	readonly writeCount: number;
+};
+
+/**
+ * Stream disk writes are the hot path (one call per token delta), so they are
+ * coalesced to at most one write per `WORKBENCH_STREAM_WRITE_COALESCE_MS`.
+ * Tool-event and turn boundaries bypass the window, and the merge guard runs
+ * before every write so steered/external messages are never lost.
+ */
+export function createWorkbenchStreamWriteCoalescer(path: string): WorkbenchStreamWriteCoalescer {
+	const state = { lastWriteMs: 0, writes: 0 };
+	const persist = (merged: WorkbenchChatSession): WorkbenchChatSession => {
+		state.lastWriteMs = Date.now();
+		state.writes += 1;
+		writeSessionPath(path, merged);
+		return merged;
+	};
+	return {
+		write(session, options = {}) {
+			const merged = mergeExternalSessionMessages(path, session);
+			if (options.toolEventChanged || Date.now() - state.lastWriteMs >= WORKBENCH_STREAM_WRITE_COALESCE_MS) {
+				return persist(merged);
+			}
+			return merged;
+		},
+		flush(session) {
+			return persist(mergeExternalSessionMessages(path, session));
+		},
+		get writeCount() {
+			return state.writes;
+		},
+	};
 }
 
 function createMessage(
@@ -705,6 +757,8 @@ export async function streamWorkbenchChatMessage(
 	};
 	writeSessionPath(path, session);
 	await emit({ type: "session", session });
+	const streamWriter = createWorkbenchStreamWriteCoalescer(path);
+	let lastToolEventsKey = JSON.stringify(assistantMessage.toolEvents);
 	const snapshotBaseline = captureArtifactSnapshotBaseline(options.workingDir);
 
 	try {
@@ -718,7 +772,13 @@ export async function streamWorkbenchChatMessage(
 					...(update.toolEvents ? { toolEvents: update.toolEvents } : {}),
 				});
 				session = { ...session, status: update.status === "error" || update.status === "stopped" ? update.status : "running" };
-				session = writeStreamSessionPath(path, session);
+				let toolEventChanged = false;
+				if (update.toolEvents !== undefined) {
+					const toolEventsKey = JSON.stringify(update.toolEvents);
+					toolEventChanged = toolEventsKey !== lastToolEventsKey;
+					lastToolEventsKey = toolEventsKey;
+				}
+				session = streamWriter.write(session, { toolEventChanged });
 				if (update.content !== undefined) await emit({ type: "delta", content: update.content });
 				for (const toolEvent of update.toolEvents ?? []) await emit({ type: "tool", toolEvent });
 				await emit({ type: "session", session });
@@ -752,11 +812,11 @@ export async function streamWorkbenchChatMessage(
 		const currentAssistant = messageById(session, assistantMessage.id) ?? assistantMessage;
 		recordChatTurnSnapshots(options, snapshotBaseline, session, currentAssistant);
 		session = await refreshWorkbenchPiSession(options, session);
-		session = writeStreamSessionPath(path, session);
+		session = streamWriter.flush(session);
 		await emit({ type: "error", message: messageText, session });
 		return session;
 	}
-	session = writeStreamSessionPath(path, session);
+	session = streamWriter.flush(session);
 	await emit({ type: "done", session });
 	return session;
 }
