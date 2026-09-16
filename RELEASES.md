@@ -10,6 +10,10 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 - Workbench chat no longer marks a message finished while the agent is still working. Completion now derives from pi's `agent_settled` lifecycle event (which also covers retries and queued continuations) instead of mid-turn `message_end` events, so the turn stops showing as complete only when pi is truly idle.
 
+### Chat markdown rendering
+
+- Assistant and user messages in the workbench chat now render as markdown instead of showing raw markdown as plain text: paragraphs, headings, bold/italic, lists, quotes, tables, links, and code blocks reuse the frame's existing panel and mono styling. Rendering goes through a safe sanitized markdown pipeline: raw HTML is never injected, hostile content such as an inline `<script>` is escaped as text, unsafe URL schemes are stripped, and links open in a new tab with `rel="noopener noreferrer"`.
+
 ### Workbench reachable from Docker hosts
 
 - `feynman serve` now shows its bind options where users look for them: the previously hidden `--host <addr>` flag appears in the `feynman --help` command list and in the new README/website "Running the workbench in Docker" walkthrough. A server bound with `--host 0.0.0.0` was already reachable through a published Docker port; only the documentation was missing.

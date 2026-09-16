@@ -109,6 +109,11 @@ Never use generic names like `research.md`, `draft.md`, `brief.md`, or `summary.
 - The lead agent is responsible for reconciling task completion. Subagents may not silently skip assigned tasks; skipped or merged tasks must be recorded in the plan artifact.
 - For critical claims, require at least one adversarial verification pass after synthesis. Fix fatal issues before delivery or surface them explicitly.
 
+## Testing notes
+
+- Workbench-web component tests render React components in Node with `react-dom/server` `renderToStaticMarkup` (no jsdom); `tests/workbench-chat-markdown.test.ts` is the pattern.
+- tsx applies tsconfig options such as `jsx` only to files matched by the root `tsconfig.json` `include` list. Any `workbench-web/src/*.tsx` imported by a test must be added to that include list, or JSX compiles with the classic runtime and fails with "React is not defined".
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.
