@@ -313,6 +313,10 @@ button {
 .conversation {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
+	/* Row contract: 1 topbar, 2 tab strip, 3 context strip, 4 scrolling pane, 5 composer.
+	   Children pin to their row explicitly so a hidden child (context strip) can never
+	   shift later siblings — otherwise the transcript lands in an auto row and the
+	   composer in the 1fr row, floating over the messages. */
 	grid-template-rows: auto auto auto minmax(0, 1fr) auto;
 	width: 100%;
 	min-width: 0;
@@ -323,6 +327,7 @@ button {
 }
 
 .topbar {
+	grid-row: 1;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -489,6 +494,7 @@ button {
 }
 
 .workspace-tab-strip {
+	grid-row: 2;
 	display: flex;
 	align-items: center;
 	gap: 5px;
@@ -553,6 +559,7 @@ button {
 }
 
 .context-strip {
+	grid-row: 3;
 	display: none;
 	align-items: center;
 	gap: 8px;
@@ -578,6 +585,7 @@ button {
 }
 
 .transcript {
+	grid-row: 4;
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
@@ -590,6 +598,7 @@ button {
 }
 
 .center-files-panel {
+	grid-row: 4;
 	min-width: 0;
 	min-height: 0;
 	padding: 18px 24px 24px;
@@ -1187,6 +1196,7 @@ button {
 }
 
 .composer {
+	grid-row: 5;
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr) auto;
 	align-items: end;
@@ -6052,7 +6062,9 @@ button {
 		width: 100%;
 		min-width: 0;
 		max-width: 100%;
-		padding: 18px 14px 36vh;
+		/* Composer sits in its own grid row, so the transcript no longer needs the
+		   old floating-composer clearance. */
+		padding: 18px 14px 24px;
 	}
 
 	.app-shell.has-side-panel .transcript,
