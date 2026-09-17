@@ -2458,7 +2458,7 @@ function App() {
 	async function loadSessionImages(sessionId: string) {
 		// The timeline endpoint is metadata-only; page through it so image refs
 		// on older entries are indexed too. Capped to bound server re-parses.
-		const entries: unknown[] = [];
+		const pages: unknown[][] = [];
 		let olderCursor: string | undefined;
 		try {
 			for (let page = 0; page < 10; page++) {
@@ -2468,10 +2468,11 @@ function App() {
 					entries: unknown[];
 					pagination: { hasOlder: boolean; olderCursor?: string };
 				}>(`/api/chat/session/${encodeURIComponent(sessionId)}/timeline?${query.toString()}`);
-				entries.push(...(payload.entries ?? []));
+				pages.push(payload.entries ?? []);
 				if (!payload.pagination?.hasOlder || !payload.pagination.olderCursor) break;
 				olderCursor = payload.pagination.olderCursor;
 			}
+			const entries = pages.reverse().flat();
 			setSessionImages(extractWorkbenchSessionImages(entries));
 		} catch {
 			// Image refs are an enhancement: a failed or missing timeline keeps the
