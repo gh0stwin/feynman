@@ -64,6 +64,8 @@ import type {
 	WorkbenchNotebookCell,
 	WorkbenchNotebookEnvironmentRecord,
 	WorkbenchNotebookKernelRecord,
+	WorkbenchPiSessionTimeline,
+	WorkbenchPiTimelineEntry,
 	WorkbenchPlanStepStatus,
 	WorkbenchProject,
 	WorkbenchResource,
@@ -81,6 +83,7 @@ import {
 	upsertAssistantTool,
 	type WorkbenchChatStreamEvent,
 } from "./stream.js";
+import { ThoughtCard, fetchCompleteTimeline, thoughtCardGroups } from "./thought-cards.js";
 import {
 	artifactClaimsForPath,
 	artifactChecksForPath,
@@ -917,6 +920,8 @@ function App() {
 	const [mode, setMode] = useState<AppMode>("workbench");
 	const [route, setRoute] = useState<WorkbenchViewRoute | null>(null);
 	const [session, setSession] = useState<WorkbenchChatSession | null>(null);
+	const [timelineEntries, setTimelineEntries] = useState<WorkbenchPiTimelineEntry[]>([]);
+	const [timelineRefresh, setTimelineRefresh] = useState(0);
 	const [selectedArtifactPath, setSelectedArtifactPath] = useState<string | null>(null);
 	const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
 	const [artifactTab, setArtifactTab] = useState<"preview" | "provenance">("preview");
@@ -1127,6 +1132,11 @@ function App() {
 		return [...(selected ? [selected] : []), ...rest].slice(0, maxVisibleRuns);
 	}, [projectRuns, run]);
 
+	const thoughtCards = useMemo(
+		() => thoughtCardGroups(session?.messages ?? [], timelineEntries),
+		[session, timelineEntries],
+	);
+
 	useEffect(() => {
 		setComposerActiveIndex(0);
 	}, [composerTrigger?.kind, composerTrigger?.query, composerItems.length]);
@@ -1153,6 +1163,7 @@ function App() {
 				if (!cancelled) {
 					setSession(payload.session);
 					setStatus("Chat ready");
+					setTimelineRefresh((value) => value + 1);
 				}
 			} catch (loadError) {
 				if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -1163,6 +1174,30 @@ function App() {
 			cancelled = true;
 		};
 	}, [mode, project, run]);
+
+	useEffect(() => {
+		if (mode !== "workbench" || !run) return;
+		let cancelled = false;
+		async function loadTimeline() {
+			try {
+				const base = `/api/chat/session/${encodeURIComponent(run!.slug)}/timeline?limit=200`;
+				const entries = await fetchCompleteTimeline((before) =>
+					fetchJson<WorkbenchPiSessionTimeline>(
+						before ? `${base}&before=${encodeURIComponent(before)}` : base,
+					),
+				);
+				if (!cancelled) setTimelineEntries(entries);
+			} catch {
+				// Thought cards are a background view of the pi timeline; a failed
+				// fetch just leaves the transcript without thinking entries.
+				if (!cancelled) setTimelineEntries([]);
+			}
+		}
+		void loadTimeline();
+		return () => {
+			cancelled = true;
+		};
+	}, [mode, run, timelineRefresh]);
 
 	useEffect(() => {
 		if (!notebookRunning) return;
@@ -2438,6 +2473,7 @@ function App() {
 				body: JSON.stringify(body),
 			});
 			setSession(payload.session);
+			setTimelineRefresh((value) => value + 1);
 			setStatus("Stopped");
 		} catch (abortError) {
 			setError(abortError instanceof Error ? abortError.message : String(abortError));
@@ -2454,14 +2490,16 @@ function App() {
 				status: "error",
 			} : current);
 			if ((streamEvent.type === "done" || streamEvent.type === "error") && streamEvent.state) setData(streamEvent.state);
-			if (streamEvent.type === "done") {
-				setBusy(false);
-				setStatus("Reply complete");
-			}
-			if (streamEvent.type === "error") {
-				setBusy(false);
-				setError(streamEvent.message || "Stream failed");
-				setStatus("Reply failed");
+			if (streamEvent.type === "done" || streamEvent.type === "error") {
+				setTimelineRefresh((value) => value + 1);
+				if (streamEvent.type === "done") {
+					setBusy(false);
+					setStatus("Reply complete");
+				} else {
+					setBusy(false);
+					setError(streamEvent.message || "Stream failed");
+					setStatus("Reply failed");
+				}
 			}
 			return;
 		}
@@ -2586,6 +2624,7 @@ function App() {
 			const state = await fetchJson<WorkbenchState>("/api/state");
 			setData(state);
 		} catch (sendError) {
+			setTimelineRefresh((value) => value + 1);
 			setError(sendError instanceof Error ? sendError.message : String(sendError));
 			setSession((current) => current ? {
 				...current,
@@ -3158,9 +3197,10 @@ function App() {
 				{centerPane === "chat" ? (
 					<section className="transcript" aria-label="Chat transcript">
 						{session?.messages.length ? (
-							session.messages.map((chatMessage, messageIndex) => {
-								const rootFrameId = session?.id ?? run?.slug;
-								const transcriptAnnotations = transcriptAnnotationsForMessage(data.transcriptAnnotations ?? [], rootFrameId, chatMessage.id, messageIndex);
+							<>
+								{session.messages.map((chatMessage, messageIndex) => {
+									const rootFrameId = session?.id ?? run?.slug;
+									const transcriptAnnotations = transcriptAnnotationsForMessage(data.transcriptAnnotations ?? [], rootFrameId, chatMessage.id, messageIndex);
 								return (
 									<article key={chatMessage.id} className={cx("message", chatMessage.role)} data-transcript-message-id={chatMessage.id}>
 										<div className="message-icon">
@@ -3183,7 +3223,14 @@ function App() {
 													<span>{chatMessage.status}</span>
 												</span>
 											</div>
-											<div className="message-markdown" data-transcript-content>
+											{chatMessage.role === "assistant" && (thoughtCards.byMessageId.get(chatMessage.id)?.length ?? 0) > 0 ? (
+												<div className="thought-cards" data-testid="message-thought-cards">
+													{(thoughtCards.byMessageId.get(chatMessage.id) ?? []).map((entry) => (
+														<ThoughtCard key={`thought-${entry.id}`} entry={entry} />
+													))}
+											</div>
+										) : null}
+										<div className="message-markdown" data-transcript-content>
 												{chatMessage.content ? (
 													<ChatMarkdown messageId={chatMessage.id} content={chatMessage.content} />
 												) : (
@@ -3228,7 +3275,15 @@ function App() {
 										</div>
 									</article>
 								);
-							})
+								})}
+							{thoughtCards.orphans.length ? (
+								<div className="thought-cards" data-testid="orphan-thought-cards">
+									{thoughtCards.orphans.map((entry) => (
+										<ThoughtCard key={`thought-${entry.id}`} entry={entry} />
+									))}
+								</div>
+							) : null}
+						</>
 						) : (
 							runArtifacts.length ? (
 								<GeneratedArtifactsBlock

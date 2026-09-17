@@ -6,6 +6,9 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+### Collapsible thought cards in chat
+
+- The workbench chat now renders the agent's reasoning as collapsible thought cards inside the assistant message body, styled like the existing tool cards and placed where the agent's outputs and tool calls already live: each thinking entry from the pi timeline endpoint appears as a compact "Thinking" header (with a timestamp when available) that is collapsed by default and expands in place to show the reasoning text. Reasoning attaches to the assistant reply it precedes, redacted thinking shows a withheld notice instead of text, and bounded previews state their truncation.
 ### Workbench chat completion signal
 
 - Workbench chat no longer marks a message finished while the agent is still working. Completion now derives from pi's `agent_settled` lifecycle event (which also covers retries and queued continuations) instead of mid-turn `message_end` events, so the turn stops showing as complete only when pi is truly idle.

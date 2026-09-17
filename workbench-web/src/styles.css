@@ -1057,6 +1057,93 @@ button {
 	color: #263420;
 }
 
+.thought-cards {
+	display: grid;
+	gap: 6px;
+	margin: 8px 0;
+}
+
+.thought-card {
+	display: grid;
+	gap: 8px;
+	border: 1px solid #dbe5d2;
+	border-radius: 8px;
+	padding: 9px 10px;
+	background: #fbfdf8;
+	color: #263420;
+}
+
+.thought-card-details {
+	min-width: 0;
+}
+
+.thought-card-header {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	cursor: pointer;
+	list-style: none;
+}
+
+.thought-card-header::-webkit-details-marker {
+	display: none;
+}
+
+.thought-card-title {
+	display: flex;
+	gap: 7px;
+	min-width: 0;
+	align-items: center;
+}
+
+.thought-card-title svg {
+	flex: 0 0 auto;
+	color: #647258;
+}
+
+.thought-card-title strong {
+	font-size: 12px;
+	line-height: 1.35;
+	color: #263420;
+}
+
+.thought-card-title span {
+	font-size: 11px;
+	color: #6b7662;
+	overflow-wrap: anywhere;
+}
+
+.thought-card-chevron {
+	flex: 0 0 auto;
+	color: #6b7662;
+	transition: transform 0.15s ease;
+}
+
+.thought-card-details[open] .thought-card-chevron {
+	transform: rotate(180deg);
+}
+
+.thought-card-body {
+	max-height: 240px;
+	margin: 7px 0 0;
+	border: 1px solid #dce5d4;
+	border-radius: 7px;
+	padding: 8px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 11px;
+	line-height: 1.5;
+	background: #ffffff;
+}
+
+.thought-card-truncated {
+	margin: 0;
+	font-size: 11px;
+	color: #77816f;
+}
+
 .tool-more {
 	border-radius: 6px;
 	padding: 6px 8px;
