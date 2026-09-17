@@ -925,6 +925,7 @@ function App() {
 	const [route, setRoute] = useState<WorkbenchViewRoute | null>(null);
 	const [session, setSession] = useState<WorkbenchChatSession | null>(null);
 	const [sessionImages, setSessionImages] = useState<WorkbenchSessionImageIndex>({ userImages: [], imagesByToolCallId: {} });
+	const imageSessionRef = useRef<string | null>(null);
 	const [selectedArtifactPath, setSelectedArtifactPath] = useState<string | null>(null);
 	const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
 	const [artifactTab, setArtifactTab] = useState<"preview" | "provenance">("preview");
@@ -2458,6 +2459,10 @@ function App() {
 	async function loadSessionImages(sessionId: string) {
 		// The timeline endpoint is metadata-only; page through it so image refs
 		// on older entries are indexed too. Capped to bound server re-parses.
+		if (imageSessionRef.current !== sessionId) {
+			imageSessionRef.current = sessionId;
+			setSessionImages({ userImages: [], imagesByToolCallId: {} });
+		}
 		const pages: unknown[][] = [];
 		let olderCursor: string | undefined;
 		try {
@@ -2472,12 +2477,15 @@ function App() {
 				if (!payload.pagination?.hasOlder || !payload.pagination.olderCursor) break;
 				olderCursor = payload.pagination.olderCursor;
 			}
+			if (imageSessionRef.current !== sessionId) return;
 			const entries = pages.reverse().flat();
 			setSessionImages(extractWorkbenchSessionImages(entries));
 		} catch {
 			// Image refs are an enhancement: a failed or missing timeline keeps the
 			// last extracted refs (cleared per session load) instead of breaking chat.
-			setSessionImages({ userImages: [], imagesByToolCallId: {} });
+			if (imageSessionRef.current === sessionId) {
+				setSessionImages({ userImages: [], imagesByToolCallId: {} });
+			}
 		}
 	}
 
