@@ -17,6 +17,7 @@
     "src/**/*.ts",
     "extensions/**/*.ts",
     "tests/**/*.ts",
-    "workbench-web/src/chat-markdown.tsx"
+    "workbench-web/src/chat-markdown.tsx",
+    "workbench-web/src/thought-cards.tsx"
   ]
 }
