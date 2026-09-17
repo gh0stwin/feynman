@@ -161,6 +161,13 @@ import {
 	type WorkbenchUpload,
 } from "./uploads.js";
 import {
+	extractWorkbenchSessionImages,
+	imagesForUserMessage,
+	workbenchSessionImageUrl,
+	type WorkbenchSessionImageIndex,
+	type WorkbenchSessionImageRef,
+} from "./session-images.js";
+import {
 	activeComposerTrigger,
 	applyComposerSuggestion,
 	beginComposerTrigger,
@@ -917,6 +924,7 @@ function App() {
 	const [mode, setMode] = useState<AppMode>("workbench");
 	const [route, setRoute] = useState<WorkbenchViewRoute | null>(null);
 	const [session, setSession] = useState<WorkbenchChatSession | null>(null);
+	const [sessionImages, setSessionImages] = useState<WorkbenchSessionImageIndex>({ userImages: [], imagesByToolCallId: {} });
 	const [selectedArtifactPath, setSelectedArtifactPath] = useState<string | null>(null);
 	const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
 	const [artifactTab, setArtifactTab] = useState<"preview" | "provenance">("preview");
@@ -1153,6 +1161,7 @@ function App() {
 				if (!cancelled) {
 					setSession(payload.session);
 					setStatus("Chat ready");
+					void loadSessionImages(payload.session.id);
 				}
 			} catch (loadError) {
 				if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -2446,6 +2455,31 @@ function App() {
 		}
 	}
 
+	async function loadSessionImages(sessionId: string) {
+		// The timeline endpoint is metadata-only; page through it so image refs
+		// on older entries are indexed too. Capped to bound server re-parses.
+		const entries: unknown[] = [];
+		let olderCursor: string | undefined;
+		try {
+			for (let page = 0; page < 10; page++) {
+				const query = new URLSearchParams({ limit: "200" });
+				if (olderCursor) query.set("before", olderCursor);
+				const payload = await fetchJson<{
+					entries: unknown[];
+					pagination: { hasOlder: boolean; olderCursor?: string };
+				}>(`/api/chat/session/${encodeURIComponent(sessionId)}/timeline?${query.toString()}`);
+				entries.push(...(payload.entries ?? []));
+				if (!payload.pagination?.hasOlder || !payload.pagination.olderCursor) break;
+				olderCursor = payload.pagination.olderCursor;
+			}
+			setSessionImages(extractWorkbenchSessionImages(entries));
+		} catch {
+			// Image refs are an enhancement: a failed or missing timeline keeps the
+			// last extracted refs (cleared per session load) instead of breaking chat.
+			setSessionImages({ userImages: [], imagesByToolCallId: {} });
+		}
+	}
+
 	function applyStreamEvent(streamEvent: WorkbenchChatStreamEvent) {
 		if (streamEvent.type === "session" || streamEvent.type === "done" || streamEvent.type === "error") {
 			if (streamEvent.session) setSession(streamEvent.session);
@@ -2457,6 +2491,7 @@ function App() {
 			if (streamEvent.type === "done") {
 				setBusy(false);
 				setStatus("Reply complete");
+				if (streamEvent.session) void loadSessionImages(streamEvent.session.id);
 			}
 			if (streamEvent.type === "error") {
 				setBusy(false);
@@ -3161,6 +3196,9 @@ function App() {
 							session.messages.map((chatMessage, messageIndex) => {
 								const rootFrameId = session?.id ?? run?.slug;
 								const transcriptAnnotations = transcriptAnnotationsForMessage(data.transcriptAnnotations ?? [], rootFrameId, chatMessage.id, messageIndex);
+								const messageImages = chatMessage.role === "user" && session
+									? imagesForUserMessage(sessionImages.userImages, session.messages, messageIndex)
+									: [];
 								return (
 									<article key={chatMessage.id} className={cx("message", chatMessage.role)} data-transcript-message-id={chatMessage.id}>
 										<div className="message-icon">
@@ -3190,6 +3228,19 @@ function App() {
 													<p>No content recorded yet.</p>
 												)}
 											</div>
+											{messageImages.length ? (
+												<div className="message-images" data-testid="message-images">
+													{messageImages.map((imageRef) => (
+														<SessionImage
+															key={`${imageRef.entryId}:${imageRef.blockIndex}`}
+															sessionId={session!.id}
+															imageRef={imageRef}
+															clientToken={clientToken}
+															alt="Image sent in this message"
+														/>
+													))}
+												</div>
+											) : null}
 											{transcriptAnnotations.length ? (
 												<div className="transcript-annotations" data-testid="transcript-annotations">
 													{transcriptAnnotations.map((annotation) => (
@@ -3221,6 +3272,9 @@ function App() {
 											<ToolEvents
 												events={chatMessage.toolEvents}
 												groups={data?.resources ?? []}
+												imagesByToolCallId={sessionImages.imagesByToolCallId}
+												sessionId={session?.id}
+												clientToken={clientToken}
 												onOpenPermissions={() => setSidePanel("customize")}
 												onPermissionDecision={(approval, decision, target) => void updateConnectorApproval(approval, decision, target)}
 												onRetryApproval={(activity) => void retryApprovedConnectorCall(activity)}
@@ -4390,12 +4444,18 @@ function GlobalCommandPalette({
 function ToolEvents({
 	events,
 	groups,
+	imagesByToolCallId,
+	sessionId,
+	clientToken,
 	onOpenPermissions,
 	onPermissionDecision,
 	onRetryApproval,
 }: {
 	events: WorkbenchToolEvent[];
 	groups: WorkbenchResourceGroup[];
+	imagesByToolCallId: Record<string, WorkbenchSessionImageRef[]>;
+	sessionId?: string;
+	clientToken: string | null;
 	onOpenPermissions: () => void;
 	onPermissionDecision: (approval: ConnectorApprovalView, decision: ConnectorApprovalDecision, target: "connector" | "tool") => void;
 	onRetryApproval: (activity: ToolActivityView) => void;
@@ -4420,6 +4480,9 @@ function ToolEvents({
 				<ToolActivityCard
 					key={event.id}
 					event={event}
+					imagesByToolCallId={imagesByToolCallId}
+					sessionId={sessionId}
+					clientToken={clientToken}
 					onOpenPermissions={onOpenPermissions}
 					onPermissionDecision={onPermissionDecision}
 					onRetryApproval={onRetryApproval}
@@ -4432,16 +4495,25 @@ function ToolEvents({
 
 function ToolActivityCard({
 	event,
+	imagesByToolCallId,
+	sessionId,
+	clientToken,
 	onOpenPermissions,
 	onPermissionDecision,
 	onRetryApproval,
 }: {
 	event: ToolActivityView;
+	imagesByToolCallId: Record<string, WorkbenchSessionImageRef[]>;
+	sessionId?: string;
+	clientToken: string | null;
 	onOpenPermissions: () => void;
 	onPermissionDecision: (approval: ConnectorApprovalView, decision: ConnectorApprovalDecision, target: "connector" | "tool") => void;
 	onRetryApproval: (activity: ToolActivityView) => void;
 }) {
 	const approval = event.approval;
+	// Chat tool events carry the pi tool call id; the timeline index keys image
+	// outputs by that same id.
+	const images = sessionId ? imagesByToolCallId[event.id] ?? [] : [];
 	return (
 		<section className={cx("tool-card", event.tone)} data-testid={`tool-activity-${event.tone}`}>
 			<div className="tool-card-header">
@@ -4455,6 +4527,19 @@ function ToolActivityCard({
 				<span className="tool-status-pill">{event.statusLabel}</span>
 			</div>
 			{event.summary ? <p className="tool-card-summary">{event.summary}</p> : null}
+			{images.length ? (
+				<div className="tool-card-images" data-testid="tool-card-images">
+					{images.map((imageRef) => (
+						<SessionImage
+							key={`${imageRef.entryId}:${imageRef.blockIndex}`}
+							sessionId={sessionId!}
+							imageRef={imageRef}
+							clientToken={clientToken}
+							alt={`Image returned by ${event.toolName || event.title || "tool"}`}
+						/>
+					))}
+				</div>
+			) : null}
 			{approval ? (
 				<div className="tool-approval-callout" data-testid="chat-connector-approval-card">
 					<div>
@@ -5083,6 +5168,17 @@ function GeneratedArtifactsBlock({
 				<div className="generated-artifacts-more">{artifacts.length - generatedArtifacts.length} more in Files</div>
 			) : null}
 		</div>
+	);
+}
+
+function SessionImage({ sessionId, imageRef, clientToken, alt }: { sessionId: string; imageRef: WorkbenchSessionImageRef; clientToken: string | null; alt: string }) {
+	return (
+		<img
+			className="session-image"
+			src={workbenchSessionImageUrl(sessionId, imageRef, clientToken)}
+			alt={alt}
+			loading="lazy"
+		/>
 	);
 }
 

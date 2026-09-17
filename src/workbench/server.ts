@@ -32,7 +32,7 @@ import { createWorkbenchOAuthStart, finishWorkbenchOAuthCallback, removeWorkbenc
 import { materializeWorkbenchOrgDatabase } from "./org-database.js";
 import { updateWorkbenchPackageSettings, type WorkbenchPackageAction } from "./package-settings.js";
 import { buildPiCommandResourceGroup, mergePiCommandResourceGroup } from "./pi-commands.js";
-import { handleWorkbenchPiTimelineRequest } from "./pi-session-timeline.js";
+import { handleWorkbenchPiSessionRecordRequests } from "./pi-session-timeline.js";
 import { generateWorkbenchPlan, updateWorkbenchPlanAction, updateWorkbenchPlanStep } from "./plan.js";
 import { createWorkbenchProject } from "./projects.js";
 import { upsertWorkbenchFrameReadCursor } from "./read-cursors.js";
@@ -76,7 +76,7 @@ type ServeWorkbenchOptions = WorkbenchServerOptions & {
 	shouldOpen?: boolean;
 };
 
-function send(response: ServerResponse, status: number, body: string, headers: Record<string, string> = {}): void {
+function send(response: ServerResponse, status: number, body: string | Buffer, headers: Record<string, string> = {}): void {
 	response.writeHead(status, {
 		"cache-control": "no-store",
 		...headers,
@@ -438,7 +438,7 @@ async function handleWorkbenchRequest(
 				return;
 			}
 
-			if (await handleWorkbenchPiTimelineRequest(options, request.method, url, (body) => sendJson(response, 200, body, headers))) {
+			if (await handleWorkbenchPiSessionRecordRequests(options, request.method, url, (body) => sendJson(response, 200, body, headers), (image) => send(response, 200, image.bytes, { "content-type": image.mimeType, "content-length": String(image.bytes.length), ...headers }), (status, message) => send(response, status, message))) {
 				return;
 			}
 

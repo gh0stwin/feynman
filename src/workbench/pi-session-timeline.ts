@@ -203,13 +203,16 @@ function usageOf(value: unknown): WorkbenchPiTimelineUsage | undefined {
 	};
 }
 
-function blockPayload(block: Record<string, unknown>, max: number): WorkbenchPiTimelineBlock {
+function blockPayload(block: Record<string, unknown>, max: number, fallbackIndex = 0): WorkbenchPiTimelineBlock {
 	const type = typeof block.type === "string" ? block.type : "unknown";
+	// The block index is its position in the message content array; the pi
+	// session JSONL stores content blocks without an index field, so the array
+	// position is the fallback and the image endpoint addresses blocks by it.
 	const contentIndex = typeof block.contentIndex === "number"
 		? block.contentIndex
 		: typeof block.index === "number"
 			? block.index
-			: 0;
+			: fallbackIndex;
 	const payload: WorkbenchPiTimelineBlock = { type, contentIndex };
 	const textSource = typeof block.text === "string" ? block.text : typeof block.thinking === "string" ? block.thinking : undefined;
 	if (textSource !== undefined) {
@@ -268,10 +271,10 @@ function messageContentBlocks(content: unknown, max: number): WorkbenchPiTimelin
 		}];
 	}
 	if (!Array.isArray(content)) return [];
-	return content.flatMap((item) => {
+	return content.flatMap((item, index) => {
 		const record = unknownRecord(item);
 		if (!record) return [];
-		return [blockPayload(record, max)];
+		return [blockPayload(record, max, index)];
 	});
 }
 
@@ -407,7 +410,7 @@ function assistantTimelineEntries(
 			});
 			return;
 		}
-		blocks.push(blockPayload(record, max));
+		blocks.push(blockPayload(record, max, index));
 	});
 	const stopReason = typeof message.stopReason === "string" ? message.stopReason : undefined;
 	const usage = usageOf(message.usage);
@@ -723,6 +726,172 @@ export function workbenchPiTimelineQueryParams(url: URL): Pick<
 		maxContentChars: numberParam("maxContentChars"),
 		maxPageChars: numberParam("maxPageChars"),
 	};
+}
+
+export type WorkbenchPiSessionImage = {
+	bytes: Buffer;
+	mimeType: string;
+};
+
+export type WorkbenchPiSessionImageResult =
+	| { status: "found"; image: WorkbenchPiSessionImage }
+	| { status: "missing" | "pending" | "not-found" };
+
+const SAFE_MIME_TYPE_PATTERN = /^[\w.+-]+\/[\w.+-]+$/;
+
+/**
+ * Keep the recorded mimeType when it is a plain media type token; fall back to
+ * a safe opaque type instead of echoing arbitrary strings into a header.
+ */
+function safeImageMimeType(value: unknown): string {
+	return typeof value === "string" && SAFE_MIME_TYPE_PATTERN.test(value) ? value : "application/octet-stream";
+}
+
+/** Parse the ?block= query parameter of the image endpoint: a non-negative integer. */
+export function parseWorkbenchImageBlockParam(value: string | null | undefined): number | undefined {
+	if (value === null || value === undefined || !/^(0|[1-9][0-9]*)$/.test(value.trim())) return undefined;
+	const parsed = Number(value);
+	return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+const PI_SESSION_IMAGE_PATHNAME = /^\/api\/chat\/session\/([^/]+)\/entry\/([^/]+)\/image$/;
+
+export type WorkbenchPiSessionImageRequestMatch = {
+	workbenchSessionId: string;
+	entryId: string;
+};
+
+/** Extract the session and entry ids from an image endpoint pathname, if any. */
+export function matchWorkbenchPiImageRequest(pathname: string): WorkbenchPiSessionImageRequestMatch | undefined {
+	const match = PI_SESSION_IMAGE_PATHNAME.exec(pathname);
+	if (!match) return undefined;
+	const decode = (raw: string): string => {
+		try {
+			return decodeURIComponent(raw);
+		} catch {
+			// Malformed escape: keep the raw segment; it fails entry resolution.
+			return raw;
+		}
+	};
+	return { workbenchSessionId: match[1]!, entryId: decode(match[2]!) };
+}
+
+/**
+ * Resolve one base64 ImageContent block from a pi session record, read-only.
+ * Images live inline in message content (user, assistant, or toolResult); the
+ * addressed block is `message.content[blockIndex]`. Missing or not-yet-flushed
+ * session files return clean "missing" / "pending" statuses; an unknown entry
+ * or a block that is not an image returns "not-found" — never a thrown error
+ * and never a write to the session file.
+ */
+export async function readWorkbenchPiSessionEntryImage(
+	options: Pick<WorkbenchPiTimelineOptions, "workingDir" | "sessionDir">,
+	workbenchSessionId: string,
+	entryId: string,
+	blockIndex: number,
+): Promise<WorkbenchPiSessionImageResult> {
+	if (!options.sessionDir) return { status: "pending" };
+	const piSessionId = workbenchPiSessionId(workbenchSessionId);
+
+	let sessionPath: string | undefined;
+	try {
+		sessionPath = await resolvePiSessionPath(options.sessionDir, options.workingDir, piSessionId);
+	} catch {
+		sessionPath = undefined;
+	}
+	if (!sessionPath) return { status: "missing" };
+
+	let fileEntries: FileEntry[];
+	let header: SessionHeader | null;
+	try {
+		({ fileEntries, header } = readTimelineFileEntries(sessionPath));
+	} catch {
+		// Unreadable or vanished between listing and read: clean not-ready shape.
+		return { status: "missing" };
+	}
+	if (!header) return { status: "pending" };
+
+	let branch: SessionEntry[];
+	try {
+		const manager = SessionManager.inMemory(header.cwd || options.workingDir, { id: header.id }, fileEntries);
+		branch = manager.getBranch();
+	} catch {
+		// Corrupt-but-headered file: degrade to the not-ready shape.
+		return { status: "pending" };
+	}
+
+	// Derived ids ("<entryId>#thinking0") address the same source entry.
+	const piEntryId = entryId.split("#")[0] ?? entryId;
+	const sourceEntry = branch.find((entry) => entry.id === piEntryId);
+	if (!sourceEntry) return { status: "not-found" };
+	const message = entryMessage(sourceEntry);
+	if (!message) return { status: "not-found" };
+	const content = message.content;
+	if (typeof content === "string" || !Array.isArray(content)) return { status: "not-found" };
+	const block = unknownRecord(content[blockIndex]);
+	if (block?.type !== "image" || typeof block.data !== "string" || !block.data.length) {
+		return { status: "not-found" };
+	}
+	let bytes: Buffer;
+	try {
+		bytes = Buffer.from(block.data, "base64");
+	} catch {
+		return { status: "not-found" };
+	}
+	if (!bytes.length) return { status: "not-found" };
+	return { status: "found", image: { bytes, mimeType: safeImageMimeType(block.mimeType) } };
+}
+
+/**
+ * Serve GET /api/chat/session/:id/entry/:entryId/image?block=N. Returns false
+ * when the request is not for the image endpoint so the caller can fall through
+ * to other routes. On a match it always answers via sendImage/sendError — the
+ * HTTP-level error behavior mirrors the timeline endpoint (clean, never a 500).
+ */
+export async function handleWorkbenchPiSessionImageRequest(
+	options: Pick<WorkbenchPiTimelineOptions, "workingDir" | "sessionDir">,
+	method: string | undefined,
+	url: URL,
+	sendImage: (image: WorkbenchPiSessionImage) => void,
+	sendError: (status: number, message: string) => void,
+): Promise<boolean> {
+	if (method !== "GET") return false;
+	const match = matchWorkbenchPiImageRequest(url.pathname);
+	if (!match) return false;
+	const blockIndex = parseWorkbenchImageBlockParam(url.searchParams.get("block"));
+	if (blockIndex === undefined) {
+		sendError(400, "Missing or invalid image block index.");
+		return true;
+	}
+	const result = await readWorkbenchPiSessionEntryImage(options, match.workbenchSessionId, match.entryId, blockIndex);
+	if (result.status === "found") {
+		sendImage(result.image);
+	} else if (result.status === "pending") {
+		sendError(404, "Session is not ready yet.");
+	} else if (result.status === "missing") {
+		sendError(404, "Session not found.");
+	} else {
+		sendError(404, "Image not found.");
+	}
+	return true;
+}
+
+/**
+ * Serve both read-only pi session record endpoints — the paginated timeline
+ * and the inline entry image — from one dispatch point. Returns false when the
+ * request matches neither endpoint so the caller can fall through to other
+ * routes.
+ */
+export async function handleWorkbenchPiSessionRecordRequests(
+	options: Pick<WorkbenchPiTimelineOptions, "workingDir" | "sessionDir">,
+	method: string | undefined,
+	url: URL,
+	sendTimeline: (body: WorkbenchPiSessionTimeline) => void,
+	sendImage: (image: WorkbenchPiSessionImage) => void,
+	sendError: (status: number, message: string) => void,
+): Promise<boolean> {
+	if (await handleWorkbenchPiTimelineRequest(options, method, url, sendTimeline)) return true;
+	return handleWorkbenchPiSessionImageRequest(options, method, url, sendImage, sendError);
 }
 
 /**
