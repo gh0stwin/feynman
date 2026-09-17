@@ -926,6 +926,11 @@ function App() {
 	const [session, setSession] = useState<WorkbenchChatSession | null>(null);
 	const [sessionImages, setSessionImages] = useState<WorkbenchSessionImageIndex>({ userImages: [], imagesByToolCallId: {} });
 	const imageSessionRef = useRef<string | null>(null);
+
+	function resetSessionImages() {
+		imageSessionRef.current = null;
+		setSessionImages({ userImages: [], imagesByToolCallId: {} });
+	}
 	const [selectedArtifactPath, setSelectedArtifactPath] = useState<string | null>(null);
 	const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
 	const [artifactTab, setArtifactTab] = useState<"preview" | "provenance">("preview");
@@ -1356,6 +1361,7 @@ function App() {
 			});
 			setData(payload.state);
 			setSession(payload.session);
+			resetSessionImages();
 			if (onboardingFiles.length) {
 				setStatus("Attaching onboarding files");
 				const nextSession = await uploadOnboardingFiles(onboardingFiles, {
@@ -1980,6 +1986,7 @@ function App() {
 			});
 			setData(payload.state);
 			setSession(payload.session);
+			resetSessionImages();
 			const nextRoute = { projectId: payload.session.projectId, runSlug: payload.session.id };
 			setRoute(nextRoute);
 			setMode("workbench");
@@ -2460,8 +2467,8 @@ function App() {
 		// The timeline endpoint is metadata-only; page through it so image refs
 		// on older entries are indexed too. Capped to bound server re-parses.
 		if (imageSessionRef.current !== sessionId) {
+			resetSessionImages();
 			imageSessionRef.current = sessionId;
-			setSessionImages({ userImages: [], imagesByToolCallId: {} });
 		}
 		const pages: unknown[][] = [];
 		let olderCursor: string | undefined;
