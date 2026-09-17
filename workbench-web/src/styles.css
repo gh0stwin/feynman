@@ -761,7 +761,6 @@ button {
 }
 
 .message-images .session-image {
-	max-width: min(420px, 100%);
 	border-color: #d8e4d5;
 }
 
@@ -989,8 +988,12 @@ button {
 
 .session-image {
 	display: block;
-	max-width: 320px;
-	max-height: 240px;
+	/* Session images are real content, not thumbnails: scale with their
+	   container (the message bubble or tool card) up to 100% width, but bound
+	   the height so tall captures stay inside the timeline flow. object-fit
+	   keeps the aspect ratio; the radius matches the surrounding bubbles. */
+	max-width: 100%;
+	max-height: 280px;
 	border: 1px solid #d8e2d0;
 	border-radius: 8px;
 	object-fit: contain;
