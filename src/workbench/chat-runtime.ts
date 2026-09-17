@@ -60,16 +60,165 @@ type PendingRpcRequest = {
 	timeout: NodeJS.Timeout;
 };
 
-type ActiveRpcRun = {
-	content: string;
+type ActiveRpcRun = WorkbenchPiRunState & {
 	onUpdate: (update: WorkbenchPromptStreamUpdate) => void | Promise<void>;
 	pendingUpdates: Array<Promise<void>>;
 	reject: (error: Error) => void;
 	resolve: () => void;
-	status: WorkbenchChatStatus;
 	timeout: NodeJS.Timeout;
 	toolEvents: Map<string, WorkbenchToolEvent>;
 };
+
+/**
+ * Mutable state for one workbench pi turn: one RPC prompt plus every retry,
+ * compaction retry, and queued continuation pi runs before it settles.
+ *
+ * Lifecycle contract (pi docs/rpc.md "Events"):
+ * - `message_end` fires for EVERY assistant message inside the run, so it is a
+ *   mid-turn signal most of the time (a real turn produced 43 toolUse message
+ *   ends between two user prompts). Only a message that ends with stopReason
+ *   `stop`/`length` is complete; `toolUse` and any other mid-turn reason keep
+ *   the message running.
+ * - `agent_end` completes one low-level agent run, but pi may still follow it
+ *   with an automatic retry, a compaction retry, or a queued continuation, so
+ *   it never settles the run and never latches run status or content.
+ * - `agent_settled` is pi's truly-idle signal (no retry, compaction retry, or
+ *   queued continuation remains); the run's final status derives from it plus
+ *   the last observed assistant stopReason.
+ */
+export type WorkbenchPiRunState = {
+	/** Assistant text accumulated across the whole run from stream deltas. */
+	content: string;
+	/** Text observed so far for the assistant message currently streaming. */
+	messageContent: string;
+	/** stopReason of the most recent assistant `message_end`. */
+	lastStopReason?: string;
+	/** Run status; stays "running" until the run settles. */
+	status: WorkbenchChatStatus;
+};
+
+const SETTLED_MESSAGE_STOP_REASONS = new Set<string>(["stop", "length"]);
+
+export function createWorkbenchPiRunState(): WorkbenchPiRunState {
+	return { content: "", messageContent: "", status: "running" };
+}
+
+/**
+ * Status for one assistant message event. Mid-turn `message_end` events (e.g.
+ * stopReason `toolUse` right before a tool call) must not mark it complete.
+ */
+export function workbenchPiMessageStatus(
+	eventType: "message_update" | "message_end",
+	stopReason: unknown,
+): WorkbenchChatStatus {
+	if (stopReason === "aborted") return "stopped";
+	if (stopReason === "error") return "error";
+	if (
+		eventType === "message_end" &&
+		typeof stopReason === "string" &&
+		SETTLED_MESSAGE_STOP_REASONS.has(stopReason)
+	) {
+		return "complete";
+	}
+	return "running";
+}
+
+function mergeWorkbenchPiMessageSnapshot(state: WorkbenchPiRunState, full: string): void {
+	if (!full) return;
+	if (!state.messageContent) {
+		// The message text never streamed as deltas (e.g. a non-streaming
+		// response): adopt it once so it is not lost.
+		if (!state.content.endsWith(full)) {
+			state.content += full;
+			state.messageContent = full;
+		}
+		return;
+	}
+	if (full.startsWith(state.messageContent)) {
+		const remainder = full.slice(state.messageContent.length);
+		if (remainder) {
+			state.content += remainder;
+			state.messageContent = full;
+		}
+		return;
+	}
+	// Otherwise the streamed deltas diverge from the snapshot; keep the deltas.
+}
+
+/** Fold one pi RPC event into the run state (message bookkeeping only). */
+export function applyWorkbenchPiRunEvent(state: WorkbenchPiRunState, event: Record<string, unknown>): void {
+	if (event.type === "message_start") {
+		const message = event.message;
+		if (message && typeof message === "object" && (message as { role?: unknown }).role === "assistant") {
+			state.messageContent = "";
+		}
+		return;
+	}
+	if (event.type === "message_update" || event.type === "message_end") {
+		const message = event.message;
+		if (message && typeof message === "object" && (message as { role?: unknown }).role === "assistant") {
+			if (event.type === "message_end") {
+				const stopReason = (message as { stopReason?: unknown }).stopReason;
+				if (typeof stopReason === "string") state.lastStopReason = stopReason;
+			}
+			mergeWorkbenchPiMessageSnapshot(state, messageText(message));
+		}
+	}
+}
+
+/**
+ * Final run status once pi is truly idle (agent_settled). Aborted and error
+ * messages keep their terminal status; anything else counts as complete.
+ */
+export function settleWorkbenchPiRunState(state: WorkbenchPiRunState): WorkbenchChatStatus {
+	state.status = state.lastStopReason === "aborted"
+		? "stopped"
+		: state.lastStopReason === "error"
+			? "error"
+			: "complete";
+	return state.status;
+}
+
+/**
+ * Process one pi RPC event line against a run state: fold it into the run
+ * bookkeeping, emit the normalized stream update, and report whether the run
+ * settled (agent_settled). This mirrors WorkbenchPiRpcClient.handleLine minus
+ * request/response plumbing, so unit tests drive the exact shipped mapping.
+ */
+export async function applyWorkbenchPiRunLine(
+	state: WorkbenchPiRunState,
+	line: string,
+	toolEvents: Map<string, WorkbenchToolEvent>,
+	onUpdate: (update: WorkbenchPromptStreamUpdate) => void | Promise<void>,
+): Promise<boolean> {
+	let event: Record<string, unknown>;
+	try {
+		event = JSON.parse(line) as Record<string, unknown>;
+	} catch {
+		return false;
+	}
+	if (event.type === "agent_settled") {
+		settleWorkbenchPiRunState(state);
+		return true;
+	}
+	applyWorkbenchPiRunEvent(state, event);
+	await handlePiJsonLine(line, toolEvents, async (update) => {
+		const normalized: WorkbenchPromptStreamUpdate = { ...update };
+		if (update.contentDelta !== undefined) {
+			state.content += update.contentDelta;
+			state.messageContent += update.contentDelta;
+			normalized.content = state.content;
+			delete (normalized as PiWorkbenchPromptStreamUpdate).contentDelta;
+		} else if (update.content !== undefined) {
+			// Message snapshots never latch or shrink the run content; the
+			// delta-accumulated transcript stays the source of truth and
+			// applyWorkbenchPiRunEvent already merged any uncovered snapshot tail.
+			normalized.content = state.content;
+		}
+		await onUpdate(normalized);
+	});
+	return false;
+}
 
 function formatAttachmentForPrompt(attachment: WorkbenchAttachment): string[] {
 	const lines = [
@@ -558,12 +707,11 @@ class WorkbenchPiRpcClient {
 	): Promise<WorkbenchPromptResult> {
 		const toolEvents = new Map<string, WorkbenchToolEvent>();
 		const activeRun: ActiveRpcRun = {
-			content: "",
+			...createWorkbenchPiRunState(),
 			onUpdate,
 			pendingUpdates: [],
 			reject: () => undefined,
 			resolve: () => undefined,
-			status: "running",
 			timeout: setTimeout(() => undefined, 0),
 			toolEvents,
 		};
@@ -653,22 +801,16 @@ class WorkbenchPiRpcClient {
 		const activeRun = this.activeRun;
 		if (!activeRun) return;
 		if (event.type === "agent_end") {
-			if (activeRun.status === "running") activeRun.status = "complete";
-			activeRun.resolve();
+			// agent_end completes one low-level agent run, but pi may still follow
+			// it with an automatic retry, a compaction retry, or a queued
+			// continuation. The run only settles on agent_settled, so resolving
+			// here would report the turn finished while pi is still working.
 			return;
 		}
-			activeRun.pendingUpdates.push(handlePiJsonLine(line, activeRun.toolEvents, async (update) => {
-				const normalized: WorkbenchPromptStreamUpdate = { ...update };
-				if (update.contentDelta !== undefined) {
-					activeRun.content += update.contentDelta;
-					normalized.content = activeRun.content;
-					delete (normalized as PiWorkbenchPromptStreamUpdate).contentDelta;
-				} else if (update.content !== undefined) {
-					activeRun.content = update.content;
-				}
-				if (normalized.status) activeRun.status = normalized.status;
-				await activeRun.onUpdate(normalized);
-			}));
+		activeRun.pendingUpdates.push((async () => {
+			const settled = await applyWorkbenchPiRunLine(activeRun, line, activeRun.toolEvents, activeRun.onUpdate);
+			if (settled) activeRun.resolve();
+		})());
 	}
 
 	private rejectPending(error: Error): void {
@@ -847,7 +989,7 @@ export async function handlePiJsonLine(
 			const stopReason = (message as { stopReason?: unknown }).stopReason;
 			await onUpdate({
 				content,
-				status: stopReason === "aborted" ? "stopped" : stopReason === "error" ? "error" : event.type === "message_end" ? "complete" : "running",
+				status: workbenchPiMessageStatus(event.type, stopReason),
 				toolEvents: [...toolEvents.values()],
 			});
 		}
