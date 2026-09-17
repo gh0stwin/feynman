@@ -39,6 +39,10 @@ import type {
 	WorkbenchToolEvent,
 } from "../../src/workbench/chat.js";
 import type {
+	WorkbenchPiTimelineEntry,
+	WorkbenchPiSessionTimeline,
+} from "../../src/workbench/pi-session-timeline.js";
+import type {
 	WorkbenchMemoryRecord,
 	WorkbenchNoteRecord,
 } from "../../src/workbench/memory.js";
@@ -69,6 +73,8 @@ export type {
 	WorkbenchNotebookEnvironmentRecord,
 	WorkbenchNotebookKernelRecord,
 	WorkbenchPlanStepStatus,
+	WorkbenchPiSessionTimeline,
+	WorkbenchPiTimelineEntry,
 	WorkbenchProject,
 	WorkbenchQueuedUserMessage,
 	WorkbenchResource,
