@@ -14,6 +14,10 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 - Assistant and user messages in the workbench chat now render as markdown instead of showing raw markdown as plain text: paragraphs, headings, bold/italic, lists, quotes, tables, links, and code blocks reuse the frame's existing panel and mono styling. Rendering goes through a safe sanitized markdown pipeline: raw HTML is never injected, hostile content such as an inline `<script>` is escaped as text, unsafe URL schemes are stripped, and links open in a new tab with `rel="noopener noreferrer"`.
 
+### Chat timeline endpoint
+
+- The workbench now serves the pi session record as a chronological typed timeline endpoint: assistant thoughts, tool calls and tool results, and answers are returned in true conversation order - the session's branch tree, not raw file order - read-only from the durable append-only session file. Entries are typed (`thinking`, `message`, `tool_result`, `custom`, `compaction`, `branch_summary`, `session_info`, and more) and lazy-loaded with entry-id cursors and per-entry content caps, so large sessions never serialize wholesale per request; missing or not-yet-flushed session files return a clean not-ready shape instead of an error.
+
 ### Workbench reachable from Docker hosts
 
 - `feynman serve` now shows its bind options where users look for them: the previously hidden `--host <addr>` flag appears in the `feynman --help` command list and in the new README/website "Running the workbench in Docker" walkthrough. A server bound with `--host 0.0.0.0` was already reachable through a published Docker port; only the documentation was missing.

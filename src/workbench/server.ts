@@ -32,6 +32,7 @@ import { createWorkbenchOAuthStart, finishWorkbenchOAuthCallback, removeWorkbenc
 import { materializeWorkbenchOrgDatabase } from "./org-database.js";
 import { updateWorkbenchPackageSettings, type WorkbenchPackageAction } from "./package-settings.js";
 import { buildPiCommandResourceGroup, mergePiCommandResourceGroup } from "./pi-commands.js";
+import { handleWorkbenchPiTimelineRequest } from "./pi-session-timeline.js";
 import { generateWorkbenchPlan, updateWorkbenchPlanAction, updateWorkbenchPlanStep } from "./plan.js";
 import { createWorkbenchProject } from "./projects.js";
 import { upsertWorkbenchFrameReadCursor } from "./read-cursors.js";
@@ -434,6 +435,10 @@ async function handleWorkbenchRequest(
 				sendJson(response, 200, {
 					sessions: listWorkbenchChatSessions({ workingDir: options.workingDir, sessionDir: options.sessionDir }),
 				}, headers);
+				return;
+			}
+
+			if (await handleWorkbenchPiTimelineRequest(options, request.method, url, (body) => sendJson(response, 200, body, headers))) {
 				return;
 			}
 
