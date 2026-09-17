@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -19,6 +19,15 @@ function makeWorkspace(): string {
 	writeFileSync(join(root, "outputs", "beta.md"), "# Beta\n\nBody.\n");
 	return root;
 }
+
+// Keep the workbench data home inside the test sandbox: by default it resolves
+// under the real user home, which both leaks test state and sits on a different
+// filesystem from the /tmp workspace.
+const workbenchDataHome = mkdtempSync(join(tmpdir(), "feynman-workbench-data-home-"));
+process.env.FEYNMAN_WORKBENCH_HOME = workbenchDataHome;
+test.after(() => {
+	rmSync(workbenchDataHome, { recursive: true, force: true });
+});
 
 test("artifact actions persist star, rename, hide, and reversible delete state", () => {
 	const root = makeWorkspace();
@@ -144,5 +153,34 @@ test("workbench server mutates artifact actions through the authenticated API", 
 	} finally {
 		await handle.close();
 		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("artifact delete and restore survive a cross-device data root", (t) => {
+	const workspace = makeWorkspace();
+	const dataHome = mkdtempSync(join(homedir(), "feynman-workbench-xdev-home-"));
+	if (statSync(workspace).dev === statSync(dataHome).dev) {
+		rmSync(workspace, { recursive: true, force: true });
+		rmSync(dataHome, { recursive: true, force: true });
+		t.skip("workspace and data home share one filesystem; cross-device rename is not exercisable here");
+		return;
+	}
+	const previousDataHome = process.env.FEYNMAN_WORKBENCH_HOME;
+	process.env.FEYNMAN_WORKBENCH_HOME = dataHome;
+	try {
+		const deleted = updateWorkbenchArtifactAction(workspace, { artifactPath: "outputs/alpha.md", action: "delete" });
+		assert.equal(deleted.deleted, true);
+		assert.equal(existsSync(join(workspace, "outputs", "alpha.md")), false);
+		assert.equal(existsSync(deleted.trashPath ?? ""), true);
+		assert.equal(readFileSync(deleted.trashPath ?? "", "utf8"), "# Alpha\n\nBody.\n");
+
+		updateWorkbenchArtifactAction(workspace, { artifactPath: "outputs/alpha.md", action: "restore" });
+		assert.equal(existsSync(join(workspace, "outputs", "alpha.md")), true);
+		assert.equal(readFileSync(join(workspace, "outputs", "alpha.md"), "utf8"), "# Alpha\n\nBody.\n");
+		assert.equal(existsSync(deleted.trashPath ?? ""), false);
+	} finally {
+		process.env.FEYNMAN_WORKBENCH_HOME = previousDataHome;
+		rmSync(workspace, { recursive: true, force: true });
+		rmSync(dataHome, { recursive: true, force: true });
 	}
 });

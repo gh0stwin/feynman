@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { migratedWorkbenchDataPath, resolveWorkbenchStoredPath, workbenchDataPath } from "./data-root.js";
@@ -179,6 +179,23 @@ function trashPathForArtifact(workingDir: string, artifactPath: string): string 
 	return workbenchDataPath(workingDir, "artifact-trash", timestamp, randomUUID().slice(0, 8), artifactPath);
 }
 
+function isCrossDeviceRenameError(error: unknown): boolean {
+	return typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "EXDEV";
+}
+
+function movePath(source: string, target: string): void {
+	try {
+		renameSync(source, target);
+	} catch (error) {
+		if (!isCrossDeviceRenameError(error)) throw error;
+		// rename(2) cannot move a file across filesystems; copy the file to the
+		// destination filesystem, then unlink the source. The trash and restore
+		// call sites guarantee the target does not exist yet.
+		cpSync(source, target, { errorOnExist: true, force: false });
+		rmSync(source);
+	}
+}
+
 export function readWorkbenchArtifactActions(workingDir: string): WorkbenchArtifactActionRecord[] {
 	return readStore(workingDir).artifacts;
 }
@@ -272,7 +289,7 @@ export function updateWorkbenchArtifactAction(
 		const absSource = resolve(workingDir, artifactPath);
 		const absTrash = trashPath;
 		mkdirSync(dirname(absTrash), { recursive: true });
-		renameSync(absSource, absTrash);
+		movePath(absSource, absTrash);
 		next.deleted = true;
 		next.hidden = true;
 		next.deletedAt = now;
@@ -296,7 +313,7 @@ export function restoreWorkbenchDeletedArtifact(workingDir: string, artifactPath
 	if (!existsSync(absTrash)) throw new Error(`Trash file not found: ${basename(record.trashPath)}`);
 	if (existsSync(absTarget)) throw new Error(`Artifact already exists: ${safePath}`);
 	mkdirSync(dirname(absTarget), { recursive: true });
-	renameSync(absTrash, absTarget);
+	movePath(absTrash, absTarget);
 	const now = nowIso();
 	const restored: WorkbenchArtifactActionRecord = {
 		...record,
