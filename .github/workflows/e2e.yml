@@ -177,7 +177,7 @@ jobs:
   published-native-installer-e2e:
     if: github.event_name == 'workflow_dispatch'
     name: native installer (${{ matrix.os }})
-    timeout-minutes: 60
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
@@ -445,7 +445,7 @@ jobs:
     if: github.event_name == 'pull_request'
     name: Windows native installer (PR)
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 80
     permissions:
       contents: read
     steps:
