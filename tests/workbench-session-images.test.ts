@@ -102,11 +102,31 @@ test("imagesForUserMessage zips user chat messages with user image entries posit
 	assert.deepEqual(imagesForUserMessage(index.userImages, messages, 1), []);
 	assert.deepEqual(imagesForUserMessage(index.userImages, messages, 2), []);
 
-	// If the timeline is missing or shifted relative to the transcript, do not
-	// guess: return no images.
+	// If the timeline has more image slots than user messages, it does not line
+	// up with the transcript: do not guess.
 	assert.deepEqual(imagesForUserMessage(index.userImages, [{ role: "user" }], 0), []);
 	assert.deepEqual(imagesForUserMessage([], messages, 0), []);
 	assert.deepEqual(imagesForUserMessage(index.userImages, [], 0), []);
+});
+
+test("imagesForUserMessage aligns to the covered suffix when the window is partial", () => {
+	// Timeline window covers only the newest 2 of 3 user messages (pagination
+	// cap); the oldest out-of-window user message must not blank the session.
+	const userImages = [
+		[{ entryId: "u2", blockIndex: 0 }],
+		[],
+	];
+	const messages = [{ role: "user" }, { role: "user" }, { role: "user" }];
+	assert.deepEqual(imagesForUserMessage(userImages, messages, 0), []);
+	assert.deepEqual(imagesForUserMessage(userImages, messages, 1), [{ entryId: "u2", blockIndex: 0 }]);
+	assert.deepEqual(imagesForUserMessage(userImages, messages, 2), []);
+});
+
+test("imagesForUserMessage returns no images when image slots outnumber user messages", () => {
+	const messages = [{ role: "user" }, { role: "user" }];
+	const userImages = [[{ entryId: "u1", blockIndex: 0 }], [], [{ entryId: "u3", blockIndex: 0 }]];
+	assert.deepEqual(imagesForUserMessage(userImages, messages, 0), []);
+	assert.deepEqual(imagesForUserMessage(userImages, messages, 1), []);
 });
 
 test("workbenchSessionImageUrl builds the image endpoint src with block and optional token", () => {

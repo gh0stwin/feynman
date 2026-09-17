@@ -99,9 +99,11 @@ export function extractWorkbenchSessionImages(entries: unknown): WorkbenchSessio
 /**
  * Images for one user chat message. Chat user messages and pi user-message
  * entries correspond one-to-one in workbench sessions, so the i-th user chat
- * message maps to the i-th user entry — but only when the timeline covers
- * every user message; otherwise return no images rather than guessing at a
- * shifted position.
+ * message maps to the i-th user entry. The timeline window may cover only the
+ * newest suffix of the session (pagination is capped), so align from the end:
+ * an out-of-window user message simply has no image instead of disabling the
+ * whole session. Only bail entirely when the image slots outnumber the user
+ * messages, which means the timeline does not line up with the transcript.
  */
 export function imagesForUserMessage(
 	userImages: WorkbenchSessionImageRef[][],
@@ -113,10 +115,13 @@ export function imagesForUserMessage(
 	for (let index = 0; index <= messageIndex; index++) {
 		if (messages[index]?.role === "user") userMessageCount++;
 	}
-	if (userImages.length !== countUserMessages(messages)) {
+	const totalUserMessages = countUserMessages(messages);
+	if (userImages.length > totalUserMessages) {
 		return [];
 	}
-	return userImages[userMessageCount - 1] ?? [];
+	const suffixOffset = totalUserMessages - userImages.length;
+	const coveredIndex = userMessageCount - 1 - suffixOffset;
+	return coveredIndex >= 0 ? (userImages[coveredIndex] ?? []) : [];
 }
 
 function countUserMessages(messages: Array<{ role: string }>): number {
