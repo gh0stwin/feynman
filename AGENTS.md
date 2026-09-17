@@ -114,6 +114,7 @@ Never use generic names like `research.md`, `draft.md`, `brief.md`, or `summary.
 
 - Workbench-web component tests render React components in Node with `react-dom/server` `renderToStaticMarkup` (no jsdom); `tests/workbench-chat-markdown.test.ts` is the pattern.
 - tsx applies tsconfig options such as `jsx` only to files matched by the root `tsconfig.json` `include` list. Any `workbench-web/src/*.tsx` imported by a test must be added to that include list, or JSX compiles with the classic runtime and fails with "React is not defined".
+- Workbench tests that touch the workbench data root (artifact actions, trash, ledgers) must set `FEYNMAN_WORKBENCH_HOME` to a temp sandbox (`tests/workbench-artifact-actions.test.ts` is the pattern). The default data root resolves under the real user home, so test state leaks there and delete/restore `renameSync` hits EXDEV when the workspace is under `/tmp`.
 
 ## Maintaining this file
 
