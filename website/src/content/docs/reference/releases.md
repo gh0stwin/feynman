@@ -9,6 +9,11 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+### Session images in the chat timeline
+
+- Image content recorded in a Pi session is now visible in the workbench chat instead of being silently dropped. A new read-only endpoint, `GET /api/chat/session/:id/entry/:entryId/image?block=N`, decodes a base64 `ImageContent` block straight from the durable session JSONL and serves the bytes with the block's recorded mime type, with the same token auth and clean not-found behavior as the timeline endpoint. Pagination and the metadata-only timeline are unchanged; the session file is never written.
+- The chat transcript renders these image entries where they belong: image inputs attached to a user message appear under that message, and image outputs returned by a tool appear in that tool's activity card, styled to match the existing timeline.
+
 ### Workbench chat completion signal
 
 - Workbench chat no longer marks a message finished while the agent is still working. Completion now derives from pi's `agent_settled` lifecycle event (which also covers retries and queued continuations) instead of mid-turn `message_end` events, so the turn stops showing as complete only when pi is truly idle.
